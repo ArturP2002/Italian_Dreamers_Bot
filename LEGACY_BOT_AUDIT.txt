@@ -1,0 +1,437 @@
+================================================================================
+ИНВЕНТАРИЗАЦИЯ LEGACY-БОТА Italy_Russian_Bot
+Источник: /Users/arturprotasov/PycharmProjects/Italy_Russian_Bot
+Дата аудита: 2026-09-10
+Объём: ~3.2k строк прикладного Python (bot/ + alembic/versions), без README.
+Miniapp в legacy нет — только Telegram-чат-бот (polling).
+Секреты из .env в этот файл не копировались.
+================================================================================
+
+1. ОБЗОР
+--------
+
+Назначение
+  Telegram-бот знакомств RU↔IT под брендом «Italian Dreamers».
+  Пользователь заполняет анкету в чате (FSM), админ модерирует и публикует
+  в Telegram-канал. По кнопке в канале можно отправить анонимный запрос на
+  переписку; при принятии стороны обмениваются username.
+
+Стек
+  - Python, точка входа: bot/main.py (asyncio.run → polling)
+  - aiogram 3.30.0 (Dispatcher + 4 роутера, FSM MemoryStorage по умолчанию)
+  - SQLAlchemy 2.0.52 + asyncpg 0.31.0 (PostgreSQL)
+  - Alembic 1.19.1 (async env, 6 ревизий)
+  - pydantic 2.13.4 — в requirements есть, в коде бота не используется
+    (конфиг — dataclass + python-dotenv 1.2.3)
+  - Gemini (generativelanguage.googleapis.com, модель gemini-flash-latest)
+    — опциональный перевод полей анкеты перед публикацией; aiohttp
+    импортируется в bot/services/translate.py (транзитивно через aiogram)
+
+Как запускается
+  python -m bot.main   либо   python bot/main.py
+  Миграции: alembic upgrade head (alembic.ini → script_location = alembic;
+  URL берётся из DATABASE_URL в .env).
+  Webhook / HTTP API / Docker / тесты / README — отсутствуют.
+
+Env-переменные (имена; значения не копируются)
+
+  Обязательные (bot/config.py):
+    BOT_TOKEN
+    ADMIN_TELEGRAM_IDS  либо устаревший алиас ADMIN_TELEGRAM_ID
+                        (список id через запятую → frozenset[int])
+    DATABASE_URL        (postgresql+asyncpg://…)
+    CHANNEL_ID          (int, обычно -100…)
+
+  Опциональные:
+    LOG_LEVEL                     default INFO
+    ENVIRONMENT                   default development
+    ADMIN_SEND_DELAY_SECONDS      default 1.0 (пауза между анкетами админу)
+    GREETING_VIDEO_NOTE_FILE_ID_RU
+    GREETING_VIDEO_NOTE_FILE_ID_IT
+    GEMINI_API_KEY                (нет в .env.example, есть в Settings)
+
+  .env.example ещё содержит ADMIN_TELEGRAM_ID (единственное число);
+  код уже принимает оба имени.
+
+
+2. КАРТА ПРОЕКТА
+----------------
+
+Дерево (без venv / __pycache__ / .DS_Store):
+
+  Italy_Russian_Bot/
+    .env / .env.example
+    requirements.txt
+    alembic.ini
+    backup_pre_age_filter_20260825_113506.sql
+    backup_pre_light_identity_20260827_124255.sql
+    alembic/
+      env.py
+      script.py.mako
+      versions/
+        0001_initial.py
+        0002_message_requests.py
+        0003_profile_translation_cache.py
+        0004_translate_name_city_country.py
+        0005_age_filter_and_wants_children.py
+        0006_light_identity_fields.py
+    bot/
+      __init__.py
+      main.py
+      config.py
+      database.py
+      models.py
+      states.py
+      keyboards.py
+      locales.py
+      handlers/  {__init__, start, contact, profile, admin}.py
+      services/  {__init__, profiles, messages, channel, translate, telegram}.py
+
+Модули (роль)
+
+  bot/main.py
+    Создаёт Bot + Dispatcher, подключает 4 роутера, start_polling.
+    Storage не задан → MemoryStorage: FSM теряется при рестарте.
+    Нет middleware, нет session-injection, нет webhook.
+
+  bot/config.py
+    Settings dataclass + get_settings() с lru_cache. load_dotenv().
+
+  bot/database.py
+    DeclarativeBase, create_async_engine(pool_pre_ping), async_sessionmaker,
+    get_session() (генератор нигде в хендлерах не используется —
+    хендлеры открывают async_session_factory() сами).
+    DATABASE_URL читается на импорте модуля: без .env пакет не импортируется.
+
+  bot/models.py
+    ORM: User, Profile, ProfilePhoto, MessageRequest + enum'ы статусов/полей.
+
+  bot/states.py
+    ContactForm (лёгкая идентичность + текст запроса),
+    ProfileForm (полная анкета),
+    PublishEdit (админ правит поле перед публикацией).
+
+  bot/keyboards.py
+    Inline/reply-клавиатуры: язык, анкета, модерация, превью публикации,
+    deep-link в канал, inbox, предупреждение о возрасте.
+
+  bot/locales.py
+    RU/IT строки интерфейса (MESSAGES), админские тексты только на RU
+    (ADMIN_MESSAGES), подписи статусов/полей. t() + normalize_language().
+
+  bot/handlers/start.py
+    /start: если payload contact_<id> — вход в contact-flow,
+    иначе выбор языка. lang:* сохраняет User и шлёт welcome + video_note.
+
+  bot/handlers/profile.py
+    FSM полной анкеты (~14 шагов). Сохранение через save_profile.
+
+  bot/handlers/contact.py
+    Deep-link, лёгкая форма (имя/возраст/фото), фильтр возраста,
+    антиконтакт в тексте, лимиты pending, inbox /messages.
+
+  bot/handlers/admin.py
+    /new, /ancets; approve/reject; перевод + превью + правка полей;
+    публикация в канал с откатом статуса при ошибке Telegram.
+
+  bot/services/profiles.py
+    upsert_user, CRUD профиля, кэш перевода, смена статуса с timestamp.
+
+  bot/services/messages.py
+    CRUD запросов на переписку, лимиты, clean_all → REJECTED.
+
+  bot/services/channel.py
+    Caption канала + send_media_group + кнопка «Invia un messaggio».
+
+  bot/services/translate.py
+    Gemini JSON-перевод 6 полей; TranslationError / TranslationNotConfigured.
+
+  bot/services/telegram.py
+    send_with_retry: один повтор на TelegramRetryAfter.
+
+Сущности и статусы
+
+  LanguageCode: ru | it
+  Gender: male | female          — в модели есть, в форме НЕ собирается
+  WantsChildren: yes | no | unsure
+  MaritalStatus: single | divorced
+  PublicationOption: standard | priority
+
+  ProfileStatus:
+    new        — только что отправлена / перезаполнена
+    approved   — админ нажал «Одобрить»
+    published  — успешно ушла в канал
+    hidden     — админ нажал «Отклонить» (не отдельный rejected)
+
+  MessageRequestStatus:
+    pending | accepted | rejected
+
+  Связи:
+    User 1—0..1 Profile (unique user_id, cascade delete)
+    Profile 1—N ProfilePhoto (unique profile_id+position)
+    Profile 1—N MessageRequest
+    MessageRequest.sender_user_id → User
+
+  Поля User (поверх telegram_*):
+    language_code, stated_age, stated_name,
+    stated_photo_file_id, stated_photo_file_unique_id
+    («лёгкая идентичность» для отправителя без полной анкеты)
+
+  Поля Profile (анкета):
+    name, age, age_min, age_max (фильтр входящих, в канал НЕ публикуется),
+    height_cm, has_children, gender (nullable, не заполняется формой),
+    wants_children, marital_status, country, city, profession,
+    hobbies (колонка NOT NULL, формой не спрашивается → save_profile
+    пишет data.get("hobbies", "")),
+    about, desired_partner, telegram_username, personal_data_agreement,
+    publication_option, status, approved_at/published_at/hidden_at,
+    кэш перевода: name/city/country/profession/about/desired_partner
+    + translated_language + translated_at.
+
+  MessageRequest:
+    text, is_vip (всегда default False — нигде не выставляется),
+    status, responded_at.
+
+
+3. ПОТОКИ ПОЛЬЗОВАТЕЛЯ
+----------------------
+
+A. Онбординг (/start без payload)
+  1. start_command (handlers/start.py) чистит FSM, шлёт choose_language.
+  2. callback lang:ru|it → upsert_user с language_code.
+  3. Если FSM был ContactForm.waiting_for_language — уход в contact-flow.
+  4. Иначе: опциональный video_note (file_id из env) + welcome +
+     кнопка «Заполнить анкету» (profile:start).
+
+B. Полная анкета (handlers/profile.py)
+  profile:start требует существующего User (иначе «сначала /start»).
+  Шаги FSM ProfileForm:
+    name → age (18–99) → height (140–210) → country → city → profession
+    → marital_status (кнопки) → has_children (да/нет)
+    → wants_children (да/нет/не уверен)
+    → about (≤1000) → desired_partner (≤1000)
+    → partner_age_min → partner_age_max (max ≥ min)
+    → photos: 3–5 штук отдельными сообщениями, после 3 — «Готово»
+    → consent (inline «Согласен», юридический текст Italian Dreamers)
+    → publication_option (standard / priority; в тексте цена 2000₽ / 20€)
+    → contact_username (@username / t.me/…)
+  Финал: save_profile → статус NEW, FSM clear, «анкета на рассмотрении».
+  Повторное заполнение ПЕРЕЗАПИСЫВАЕТ профиль, сбрасывает фото и timestamps,
+  снова NEW (даже если уже published).
+
+  Не спрашивается: gender, hobbies.
+  Нет шага «отмена», нет черновика в БД (только FSM memory).
+  Нет уведомления админу о новой анкете — админ сам жмёт /new.
+
+C. Модерация (handlers/admin.py, только admin_telegram_ids)
+  /new     — список NEW, кнопки Одобрить / Отклонить
+             NEW → APPROVED | HIDDEN
+  /ancets  — список APPROVED (имя команды — опечатка «анкеты»),
+             кнопки опубликовать IT / RU.
+  Сортировка: created_at ASC. publication_option на сортировку НЕ влияет.
+
+D. Публикация в канал
+  admin:publish:<lang>:<id> → превью caption.
+  Если язык публикации ≠ язык автора:
+    - берётся кэш *_translated при полном комплекте полей;
+    - иначе Gemini (нужен GEMINI_API_KEY), результат пишется в кэш.
+  Если языки совпадают — перевод не вызывается.
+  Админ может править 6 translatable-полей (PublishEdit):
+    при lang == source — правит оригинал;
+    иначе — только столбец перевода.
+  confirm_publish: APPROVED → PUBLISHED, затем send_media_group + caption
+  + кнопка https://t.me/<bot>?start=contact_<profile_id>
+    («💌 Invia un messaggio» — подпись кнопки всегда итальянская).
+  Ошибка Telegram → откат PUBLISHED → APPROVED.
+  age_min/age_max в caption канала намеренно не входят.
+
+E. Запрос сообщения (handlers/contact.py)
+  /start contact_<id> → begin_contact_flow.
+  Профиль должен быть PUBLISHED, иначе «анкета недоступна».
+  Нет User → сначала язык (ContactForm.waiting_for_language).
+  Если у отправителя есть полная анкета — light_* берутся из неё
+  (имя, возраст, первое фото). Иначе — из User.stated_*.
+  Дальше _advance_contact_flow по недостающим полям:
+    имя (unicode-буквы, дефис/апостроф, ≤20)
+    → возраст 18–99
+    → если возраст вне age_min..age_max получателя — предупреждение
+      «Написать» / «Отмена» (override сохраняется только в FSM)
+    → фото (file_id в stated_photo_*)
+    → текст ≤500, без URL / @mention / 7+ цифр подряд.
+  Лимиты: ≤3 pending от отправителя всего; не более 1 pending на эту анкету.
+  create_message_request (is_vip не передаётся).
+  Получателю — inbox_new_notification (если не заблокировал бота).
+  Отправителю — «сообщение отправлено».
+  Light-фото и stated_name НЕ показываются получателю в inbox
+  (см. раздел 5).
+
+F. Inbox
+  /messages: нужен СВОЙ Profile (любой статус, не только published).
+  Без профиля — «need_profile» (дефолтный язык, не i18n из User).
+  Список pending + Accept/Reject + «Очистить всё» (все pending → rejected).
+  Accept: сторонам шлётся username друг друга (если есть).
+  Light-фото отправителя в этот момент тоже не пересылается.
+
+
+4. ЧТО СДЕЛАНО / ДЛЯ ЧЕГО
+-------------------------
+
+Онбординг
+  Выбор RU/IT, upsert User, welcome + опциональный кружок-приветствие.
+  Deep-link из канала сразу в сценарий сообщения.
+
+Профиль
+  Пошаговая анкета под «серьёзные отношения»: возраст 18+, рост, гео,
+  семья/дети, тексты о себе и партнёре, диапазон возраста входящих,
+  3–5 фото, согласие на публикацию, username для связи,
+  выбор standard/priority (только флаг в БД).
+  Один профиль на пользователя (unique user_id).
+
+Фото
+  Telegram file_id + file_unique_id, порядок position.
+  В админку и канал уходят media group; при BadRequest админу шлётся текст,
+  в канал фото молча пропускаются.
+
+Админ-модерация
+  Ручная очередь /new и /ancets, задержка между рассылками,
+  смена статуса с expected_status (защита от гонок «уже изменили»).
+  Правка полей перед публикацией. Админка на русском.
+
+Публикация в канал
+  Caption с i18n-подписями, перевод при смене языка, кнопка deep-link.
+  Приватный age-фильтр в пост не попадает.
+
+Message requests
+  Прокси-переписка без раскрытия контакта до Accept.
+  Антиспам: лимит pending, запрет дубля, фильтр телефонов/ссылок/@.
+  Возрастной фильтр с возможностью «написать всё равно».
+  Inbox-команда и массовая очистка.
+
+«Лёгкая идентичность»
+  Для тех, кто пишет из канала, не заполняя анкету: имя/возраст/фото
+  пишутся на User и переиспользуются. Миграция 0006.
+
+Переводы
+  Кэш на профиле (0003+0004). Gemini с JSON-schema и разными правилами
+  для имени (транслит) vs город/страна (экзонимы) vs тексты.
+  Без ключа публикация на «чужой» язык невозможна.
+
+i18n
+  Полные зеркала RU/IT для пользовательских строк; админ — только RU.
+  Парсеры кнопок принимают оба языка + несколько орфографических вариантов.
+
+Миграции / бэкапы
+  0001 users + profiles + profile_photos
+  0002 message_requests (+ is_vip заранее)
+  0003 кэш перевода profession/about/desired_partner
+  0004 кэш name/city/country
+  0005 age_min/age_max, stated_age, wants_children bool→string enum
+       (бэкап backup_pre_age_filter_*.sql)
+  0006 stated_name + photo file ids
+       (бэкап backup_pre_light_identity_*.sql)
+  Alembic async, модели регистрируются импортом в env.py.
+
+
+5. ЧТО НЕ ДОДЕЛАНО / СЛАБОСТИ / РИСКИ ПЕРЕИСПОЛЬЗОВАНИЯ
+-------------------------------------------------------
+
+Нет miniapp / webhook / HTTP API
+  Весь UX — FSM в личке. Нет WebApp, нет REST для фронта, нет канала
+  уведомлений кроме bot.send_message. Для связки miniapp + push это
+  писать с нуля.
+
+Платежи за priority / VIP
+  В копирайте анкеты цена 2000 ₽ / 20 €, в БД publication_option и
+  MessageRequest.is_vip. Нет invoice, Stars, проверки оплаты.
+  Очередь админа не сортирует priority первыми. is_vip никогда не true.
+
+Лёгкая идентичность недоведена до UX
+  stated_name / stated_age / stated_photo собираются, но inbox
+  (_format_inbox_item) показывает имя/возраст только если у отправителя
+  есть полная Profile; иначе — один текст сообщения. Фото отправителя
+  получателю не отправляется ни при запросе, ни при Accept.
+
+Дыры модели vs форма
+  Gender и hobbies в схеме есть, формой не заполняются.
+  Channel caption всегда с эмодзи 💃 (нет ветки по gender).
+  hobbies = "" при каждом save.
+
+FSM-only, polling, MemoryStorage
+  Рестарт бота теряет незавершённые анкеты/запросы.
+  Нет горизонтального масштаба (один процесс polling).
+  Нет черновика анкеты в БД.
+
+Перезапись профиля
+  Повторный profile:start затирает published-анкету обратно в NEW
+  без предупреждения и без снятия поста из канала.
+
+Inbox только у владельца Profile
+  Человек без анкеты не может читать входящие (хотя сам писать может).
+  /messages без профиля отвечает ключом need_profile без языка пользователя.
+
+Зависимость от Gemini
+  Публикация на другой язык падает без ключа / при ошибке API.
+  Модель захардкожена (gemini-flash-latest). Нет очереди/ретраев перевода.
+
+Инфра / качество
+  Нет README, Docker, CI, тестов.
+  pydantic в requirements не используется.
+  GEMINI_API_KEY нет в .env.example.
+  database.py падает на импорте без DATABASE_URL.
+  Команда /ancets — опечатка.
+  Кнопка канала всегда на итальянском, даже в RU-посте.
+  Админские callback'и парсятся split(":"), без подписи/TTL.
+  send_with_retry — только один повтор RetryAfter.
+  Нет уведомления админу о новой анкете.
+  Нет пользовательского «удалить анкету» (в consent обещано обращение
+  к администрации вручную).
+  Нет TODO/FIXME в коде — долги не помечены, они в поведении.
+
+Безопасность / продукт
+  Возраст — self-reported, 18+ только согласием.
+  Фото живут как Telegram file_id (привязка к боту).
+  Фильтр контактов в сообщении эвристический (легко обойти словами).
+  Раскрытие username при Accept: если username нет — «ещё не указал»,
+  без запасного канала связи.
+
+
+6. КАНДИДАТЫ НА ПЕРЕИСПОЛЬЗОВАНИЕ
+---------------------------------
+
+Брать в новый проект (идеи / контракты, не копипасту FSM-хендлеров)
+
+  - Доменная модель анкеты: поля, лимиты (возраст 18–99, рост 140–210,
+    3–5 фото, about/desired_partner ≤1000, username regex).
+  - Статусы ProfileStatus и MessageRequestStatus + timestamps.
+  - Приватный age_min/age_max (не публиковать в канале/ленте).
+  - PublicationOption и задел is_vip — как продуктовые флаги, если
+    появятся реальные платежи.
+  - Тексты locales.py (RU/IT, consent Italian Dreamers) — как источник
+    копирайта; вынести в словари/CMS, не держать в Python-дикте навсегда.
+  - Правила перевода полей (имя транслит, город/страна экзоним).
+  - Антиконтакт в тексте запроса (URL / @ / телефон).
+  - Лимиты: 3 pending на отправителя, 1 pending на пару.
+  - Deep-link схема contact_<profile_id> — можно сохранить для бота-уведомителя.
+  - Юридический consent (18+, публикация, невозможность отозвать задним числом).
+
+Писать заново
+
+  - Miniapp UI и клиентский стейт (вместо FSM-опросника в чате).
+  - HTTP API (онбординг, CRUD профиля, лента, inbox) + авторизация
+    по Telegram initData.
+  - Канал уведомлений: бот как notifier, не как единственный UI.
+  - Очередь модерации с приоритетом и оплатой (сейчас только флаги).
+  - Показ лёгкой идентичности получателю (фото+имя в inbox) — довести,
+    если сценарий «написать из канала без анкеты» остаётся.
+  - Webhook, постоянный FSM/draft storage, Docker/CI/тесты.
+  - Хранение фото (file_id бота недостаточно для отдельного web-фронта).
+  - Админка: лучше web, чем /new+/ancets в личке.
+
+Приоритет переиспользования (коротко)
+  1) Поля и статусы анкеты + миграционная история схемы.
+  2) RU/IT копирайт и consent.
+  3) Правила модерации/публикации (new→approved→published|hidden,
+     перевод при смене языка, age range скрыт).
+  4) Контракт message request (pending/accept/reject, лимиты, антиконтакт).
+  5) Бот оставить как notifier + deep-link, UI унести в miniapp.
+================================================================================

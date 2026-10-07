@@ -1,0 +1,8 @@
+{
+  "include": ["backend", "bot"],
+  "extraPaths": ["backend", "bot"],
+  "venvPath": "backend",
+  "venv": ".venv",
+  "pythonVersion": "3.13",
+  "typeCheckingMode": "basic"
+}
