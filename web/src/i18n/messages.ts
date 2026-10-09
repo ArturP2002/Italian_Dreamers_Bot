@@ -125,6 +125,10 @@ export const messages = {
     writeFromSaved: "Имя и возраст — из вашего первого письма.",
     writePhotoOptional: "Необязательно: без нового фото отправится текущее.",
     contactForbidden: "Уберите телефон, @username и ссылки из текста.",
+    letterDuplicate:
+      "У вас уже есть активное письмо или диалог с этим человеком. Откройте его в «Мои знакомства».",
+    letterSoftBanned: "Слишком много писем за короткое время. Попробуйте позже.",
+    letterPendingLimit: "Слишком много писем без ответа. Дождитесь ответа или отмените лишние.",
     chatTitle: "Чат",
     chatPlaceholder: "Сообщение…",
     chatSend: "Отправить",
@@ -359,6 +363,10 @@ export const messages = {
     writeFromSaved: "Nome ed età dalla tua prima lettera.",
     writePhotoOptional: "Facoltativo: senza una nuova foto verrà inviata quella attuale.",
     contactForbidden: "Togli telefono, @username e link dal testo.",
+    letterDuplicate:
+      "Hai già una lettera o una chat attiva con questa persona. Aprila in «I miei incontri».",
+    letterSoftBanned: "Troppe lettere in poco tempo. Riprova più tardi.",
+    letterPendingLimit: "Troppe lettere senza risposta. Attendi una risposta o chiudi quelle in sospeso.",
     chatTitle: "Chat",
     chatPlaceholder: "Messaggio…",
     chatSend: "Invia",

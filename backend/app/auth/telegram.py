@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from urllib.parse import parse_qsl
 
 from fastapi import Depends, Header, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings, get_settings
@@ -93,24 +93,37 @@ async def upsert_user_from_telegram(
     *,
     preferred_language: str | None = None,
 ) -> User:
-    result = await session.execute(select(User).where(User.telegram_id == tg.id))
-    user = result.scalar_one_or_none()
+    """Create or update user by telegram_id (safe under concurrent requests)."""
     lang = preferred_language or (tg.language_code if tg.language_code in {"ru", "it"} else "ru")
-    if user is None:
-        user = User(
-            telegram_id=tg.id,
-            telegram_username=tg.username,
-            telegram_first_name=tg.first_name,
-            telegram_last_name=tg.last_name,
-            language_code=lang[:2],
+    values = {
+        "telegram_id": tg.id,
+        "telegram_username": tg.username,
+        "telegram_first_name": tg.first_name,
+        "telegram_last_name": tg.last_name,
+        "language_code": lang[:2],
+    }
+    update_set: dict = {
+        "telegram_username": tg.username,
+        "telegram_first_name": tg.first_name,
+        "telegram_last_name": tg.last_name,
+    }
+    if preferred_language is not None:
+        update_set["language_code"] = lang[:2]
+
+    stmt = (
+        insert(User)
+        .values(**values)
+        .on_conflict_do_update(
+            index_elements=[User.telegram_id],
+            set_=update_set,
         )
-        session.add(user)
-    else:
-        user.telegram_username = tg.username
-        user.telegram_first_name = tg.first_name
-        user.telegram_last_name = tg.last_name
+        .returning(User.id)
+    )
+    result = await session.execute(stmt)
+    user_id = result.scalar_one()
     await session.commit()
-    await session.refresh(user)
+    user = await session.get(User, user_id)
+    assert user is not None
     return user
 
 

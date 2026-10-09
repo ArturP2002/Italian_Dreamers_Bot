@@ -83,6 +83,89 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "stats", label: "Статистика" },
 ];
 
+const PROFILE_PAGE_SIZE = 25;
+
+function profileBelongsToTab(status: string, tab: Tab): boolean {
+  if (tab === "new") return status === "new";
+  if (tab === "queue") return status === "queued" || status === "awaiting_payment";
+  if (tab === "published") return status === "published";
+  return true;
+}
+
+function adBelongsToFilter(status: string, filter: AdFilter): boolean {
+  if (filter === "all") return true;
+  if (filter === "pending") return status === "pending";
+  if (filter === "queue") {
+    return status === "awaiting_payment" || status === "queued" || status === "active";
+  }
+  return true;
+}
+
+function toListItem(d: AdminProfileDetail): AdminProfileListItem {
+  return {
+    id: d.id,
+    status: d.status,
+    name: d.name,
+    age: d.age,
+    gender: d.gender,
+    city: d.city,
+    country: d.country,
+    telegram_username: d.telegram_username,
+    user_telegram_id: d.user_telegram_id,
+    user_id: d.user_id,
+    moderation_feedback: d.moderation_feedback,
+    scheduled_at: d.scheduled_at,
+    paid_at: d.paid_at,
+    published_at: d.published_at,
+    approved_at: d.approved_at,
+    created_at: d.created_at,
+    photo_url: d.photo_url,
+  };
+}
+
+function isProfileDetail(value: unknown): value is AdminProfileDetail {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "photos" in value &&
+    "message_credits" in value &&
+    "user_id" in value &&
+    "name" in value
+  );
+}
+
+function isAdminAd(value: unknown): value is AdminAd {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "category" in value &&
+    "title" in value &&
+    "user_id" in value &&
+    !("photos" in value)
+  );
+}
+
+function isAdminUser(value: unknown): value is AdminUser {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "telegram_id" in value &&
+    "message_credits" in value &&
+    "is_blocked" in value &&
+    !("photos" in value) &&
+    !("category" in value)
+  );
+}
+
+function isAdminComplaint(value: unknown): value is AdminComplaint {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "reason" in value &&
+    "reporter_user_id" in value
+  );
+}
+
 function statusRu(status: string): string {
   const map: Record<string, string> = {
     draft: "черновик",
@@ -158,6 +241,8 @@ function formatDt(value: string | null | undefined): string {
 export function AdminScreen({ language }: Props) {
   const [tab, setTab] = useState<Tab>("new");
   const [items, setItems] = useState<AdminProfileListItem[]>([]);
+  const [profilesHasMore, setProfilesHasMore] = useState(false);
+  const [profilesLoadingMore, setProfilesLoadingMore] = useState(false);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [payments, setPayments] = useState<AdminPayment[]>([]);
   const [ads, setAds] = useState<AdminAd[]>([]);
@@ -177,21 +262,100 @@ export function AdminScreen({ language }: Props) {
   const [notice, setNotice] = useState<string | null>(null);
   const [result, setResult] = useState<ActionOutcome | null>(null);
 
+  const syncScheduleLocal = (d: AdminProfileDetail | null) => {
+    if (d?.scheduled_at) {
+      const local = new Date(d.scheduled_at);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      setScheduleLocal(
+        `${local.getFullYear()}-${pad(local.getMonth() + 1)}-${pad(local.getDate())}T${pad(local.getHours())}:${pad(local.getMinutes())}`,
+      );
+    } else {
+      setScheduleLocal("");
+    }
+  };
+
+  const applyProfileUpdate = useCallback(
+    (d: AdminProfileDetail) => {
+      setDetail(d);
+      syncScheduleLocal(d);
+      setItems((prev) => {
+        if (!profileBelongsToTab(d.status, tab)) {
+          return prev.filter((i) => i.id !== d.id);
+        }
+        const mapped = toListItem(d);
+        const idx = prev.findIndex((i) => i.id === d.id);
+        if (idx === -1) return prev;
+        const next = prev.slice();
+        next[idx] = mapped;
+        return next;
+      });
+    },
+    [tab],
+  );
+
+  const applyAdUpdate = useCallback(
+    (ad: AdminAd) => {
+      setAdDetail(ad);
+      setAds((prev) => {
+        if (!adBelongsToFilter(ad.status, adFilter)) {
+          return prev.filter((i) => i.id !== ad.id);
+        }
+        const idx = prev.findIndex((i) => i.id === ad.id);
+        if (idx === -1) return prev;
+        const next = prev.slice();
+        next[idx] = ad;
+        return next;
+      });
+    },
+    [adFilter],
+  );
+
   const loadList = useCallback(async () => {
     setError(null);
     try {
-      if (tab === "new") setItems(await adminFetchProfiles("new"));
-      else if (tab === "queue") setItems(await adminFetchProfiles("queue"));
-      else if (tab === "published") setItems(await adminFetchProfiles("published"));
-      else if (tab === "ads") setAds(await adminFetchAds(adFilter === "all" ? undefined : adFilter));
-      else if (tab === "complaints") setComplaints(await adminFetchComplaints("open"));
-      else if (tab === "users") setUsers(await adminFetchUsers(query));
-      else if (tab === "payments") setPayments(await adminFetchPayments());
-      else if (tab === "stats") setStats(await adminFetchStats());
+      if (tab === "new" || tab === "queue" || tab === "published") {
+        const status = tab === "new" ? "new" : tab === "queue" ? "queue" : "published";
+        const page = await adminFetchProfiles(status, { limit: PROFILE_PAGE_SIZE, offset: 0 });
+        setItems(page);
+        setProfilesHasMore(page.length >= PROFILE_PAGE_SIZE);
+      } else if (tab === "ads") {
+        setAds(await adminFetchAds(adFilter === "all" ? undefined : adFilter));
+      } else if (tab === "complaints") {
+        setComplaints(await adminFetchComplaints("open"));
+      } else if (tab === "users") {
+        setUsers(await adminFetchUsers(query));
+      } else if (tab === "payments") {
+        setPayments(await adminFetchPayments());
+      } else if (tab === "stats") {
+        setStats(await adminFetchStats());
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Load failed");
     }
   }, [tab, query, adFilter]);
+
+  const loadMoreProfiles = async () => {
+    if (profilesLoadingMore || !profilesHasMore) return;
+    if (tab !== "new" && tab !== "queue" && tab !== "published") return;
+    setProfilesLoadingMore(true);
+    setError(null);
+    try {
+      const status = tab === "new" ? "new" : tab === "queue" ? "queue" : "published";
+      const page = await adminFetchProfiles(status, {
+        limit: PROFILE_PAGE_SIZE,
+        offset: items.length,
+      });
+      setItems((prev) => {
+        const seen = new Set(prev.map((i) => i.id));
+        return [...prev, ...page.filter((i) => !seen.has(i.id))];
+      });
+      setProfilesHasMore(page.length >= PROFILE_PAGE_SIZE);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Load failed");
+    } finally {
+      setProfilesLoadingMore(false);
+    }
+  };
 
   useEffect(() => {
     void loadList();
@@ -205,15 +369,7 @@ export function AdminScreen({ language }: Props) {
     void (async () => {
       const d = await adminFetchProfile(selectedId);
       setDetail(d);
-      if (d?.scheduled_at) {
-        const local = new Date(d.scheduled_at);
-        const pad = (n: number) => String(n).padStart(2, "0");
-        setScheduleLocal(
-          `${local.getFullYear()}-${pad(local.getMonth() + 1)}-${pad(local.getDate())}T${pad(local.getHours())}:${pad(local.getMinutes())}`,
-        );
-      } else {
-        setScheduleLocal("");
-      }
+      syncScheduleLocal(d);
     })();
   }, [selectedId]);
 
@@ -234,7 +390,7 @@ export function AdminScreen({ language }: Props) {
     setError(null);
     setNotice(null);
     try {
-      await action();
+      const payload = await action();
       if (outcome) {
         setResult(outcome);
         setFeedback("");
@@ -242,12 +398,26 @@ export function AdminScreen({ language }: Props) {
         setNotice(okMsg);
       }
       window.scrollTo({ top: 0 });
-      await loadList();
-      if (selectedId != null) {
-        setDetail(await adminFetchProfile(selectedId));
-      }
-      if (selectedAdId != null) {
-        setAdDetail(await adminFetchAd(selectedAdId));
+
+      if (isProfileDetail(payload)) {
+        applyProfileUpdate(payload);
+      } else if (isAdminAd(payload)) {
+        applyAdUpdate(payload);
+      } else if (isAdminUser(payload)) {
+        if (detail && detail.user_id === payload.id) {
+          setDetail({
+            ...detail,
+            message_credits: payload.message_credits,
+            is_blocked: payload.is_blocked,
+          });
+        }
+        setUsers((prev) => prev.map((u) => (u.id === payload.id ? { ...u, ...payload } : u)));
+      } else if (isAdminComplaint(payload)) {
+        setComplaints((prev) =>
+          payload.status === "open" ? prev.map((c) => (c.id === payload.id ? payload : c)) : prev.filter((c) => c.id !== payload.id),
+        );
+      } else {
+        await loadList();
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Action failed");
@@ -698,29 +868,41 @@ export function AdminScreen({ language }: Props) {
       {selectedId == null &&
       selectedAdId == null &&
       (tab === "new" || tab === "queue" || tab === "published") ? (
-        <ul className="admin-list">
-          {items.length === 0 ? <li className="admin-empty">Пусто</li> : null}
-          {items.map((item) => (
-            <li key={item.id}>
-              <button type="button" className="admin-list-item" onClick={() => setSelectedId(item.id)}>
-                {item.photo_url ? (
-                  <img src={mediaUrl(item.photo_url)} alt="" />
-                ) : (
-                  <div className="admin-list-item__ph" />
-                )}
-                <div>
-                  <strong>
-                    {item.name}, {item.age}
-                  </strong>
-                  <span>
-                    {statusRu(item.status)} · {item.city}
-                  </span>
-                  <span>@{item.telegram_username || "—"}</span>
-                </div>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="admin-list">
+            {items.length === 0 ? <li className="admin-empty">Пусто</li> : null}
+            {items.map((item) => (
+              <li key={item.id}>
+                <button type="button" className="admin-list-item" onClick={() => setSelectedId(item.id)}>
+                  {item.photo_url ? (
+                    <img src={mediaUrl(item.photo_url)} alt="" loading="lazy" decoding="async" />
+                  ) : (
+                    <div className="admin-list-item__ph" />
+                  )}
+                  <div>
+                    <strong>
+                      {item.name}, {item.age}
+                    </strong>
+                    <span>
+                      {statusRu(item.status)} · {item.city}
+                    </span>
+                    <span>@{item.telegram_username || "—"}</span>
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+          {profilesHasMore ? (
+            <button
+              type="button"
+              className="admin-btn admin-btn--block"
+              disabled={profilesLoadingMore || busy}
+              onClick={() => void loadMoreProfiles()}
+            >
+              {profilesLoadingMore ? "Загрузка…" : "Ещё"}
+            </button>
+          ) : null}
+        </>
       ) : null}
 
       {selectedAdId == null && tab === "ads" ? (

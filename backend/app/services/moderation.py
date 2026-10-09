@@ -13,6 +13,8 @@ from app.config import Settings
 from app.models import (
     AdRequest,
     AdRequestStatus,
+    Complaint,
+    ComplaintStatus,
     CreditLedgerEntry,
     LedgerEntryType,
     MessageRequest,
@@ -21,10 +23,9 @@ from app.models import (
     PaymentProduct,
     PaymentStatus,
     Profile,
+    ProfilePhoto,
     ProfileStatus,
     User,
-    Complaint,
-    ComplaintStatus,
 )
 from app.services.payments import create_publish_payment, send_publish_invoice
 from app.services.notify import (
@@ -47,17 +48,37 @@ async def get_profile_admin(session: AsyncSession, profile_id: int) -> Profile |
     return result.scalar_one_or_none()
 
 
+async def first_photo_file_ids(
+    session: AsyncSession,
+    profile_ids: list[int],
+) -> dict[int, str]:
+    """One query: first photo file_id per profile (by position). No full photo graphs."""
+    if not profile_ids:
+        return {}
+    result = await session.execute(
+        select(ProfilePhoto)
+        .where(ProfilePhoto.profile_id.in_(profile_ids))
+        .order_by(ProfilePhoto.profile_id.asc(), ProfilePhoto.position.asc())
+    )
+    out: dict[int, str] = {}
+    for photo in result.scalars().all():
+        if photo.profile_id not in out:
+            out[photo.profile_id] = photo.file_id
+    return out
+
+
 async def list_profiles(
     session: AsyncSession,
     *,
     status: str | None = None,
     statuses: list[str] | None = None,
-    limit: int = 50,
+    limit: int = 25,
     offset: int = 0,
 ) -> list[Profile]:
+    """Lean list: profile + user only (no photos collection)."""
     stmt = (
         select(Profile)
-        .options(selectinload(Profile.photos), selectinload(Profile.user))
+        .options(selectinload(Profile.user))
         .order_by(Profile.updated_at.desc(), Profile.id.desc())
         .limit(limit)
         .offset(offset)
@@ -151,7 +172,7 @@ async def search_users(
     if not q:
         result = await session.execute(
             select(User)
-            .options(selectinload(User.profile).selectinload(Profile.photos))
+            .options(selectinload(User.profile))
             .order_by(User.id.desc())
             .limit(limit)
         )
@@ -168,7 +189,7 @@ async def search_users(
 
     result = await session.execute(
         select(User)
-        .options(selectinload(User.profile).selectinload(Profile.photos))
+        .options(selectinload(User.profile))
         .where(or_(*filters))
         .order_by(User.id.desc())
         .limit(limit)

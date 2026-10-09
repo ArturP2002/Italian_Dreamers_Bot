@@ -430,8 +430,15 @@ export async function adminFetchStats(): Promise<AdminStats | null> {
   return apiFetch<AdminStats>("/api/admin/stats");
 }
 
-export async function adminFetchProfiles(status?: string): Promise<AdminProfileListItem[]> {
-  const q = status ? `?status=${encodeURIComponent(status)}` : "";
+export async function adminFetchProfiles(
+  status?: string,
+  opts?: { limit?: number; offset?: number },
+): Promise<AdminProfileListItem[]> {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (opts?.limit != null) params.set("limit", String(opts.limit));
+  if (opts?.offset != null) params.set("offset", String(opts.offset));
+  const q = params.toString() ? `?${params}` : "";
   return (await apiFetch<AdminProfileListItem[]>(`/api/admin/profiles${q}`)) ?? [];
 }
 

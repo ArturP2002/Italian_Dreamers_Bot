@@ -841,6 +841,12 @@
   color: var(--color-graphite);
 }
 
+.admin-btn--block {
+  display: block;
+  width: 100%;
+  margin: 12px 0 20px;
+}
+
 .admin-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;

@@ -28,6 +28,7 @@ from app.services.complaints import get_complaint, list_complaints, resolve_comp
 from app.services.moderation import (
     admin_stats,
     approve_profile,
+    first_photo_file_ids,
     get_profile_admin,
     grant_credits,
     list_profiles,
@@ -140,10 +141,12 @@ def _photo_url(file_id: str) -> str:
     return ""
 
 
-def _list_item(profile: Profile) -> ProfileListItem:
-    photos = sorted(profile.photos or [], key=lambda p: p.position)
-    first = photos[0] if photos else None
+def _list_item(profile: Profile, *, photo_file_id: str | None = None) -> ProfileListItem:
     user = profile.user
+    file_id = photo_file_id
+    if file_id is None and profile.photos:
+        photos = sorted(profile.photos, key=lambda p: p.position)
+        file_id = photos[0].file_id if photos else None
     return ProfileListItem(
         id=profile.id,
         status=profile.status,
@@ -161,13 +164,14 @@ def _list_item(profile: Profile) -> ProfileListItem:
         published_at=profile.published_at,
         approved_at=profile.approved_at,
         created_at=profile.created_at,
-        photo_url=_photo_url(first.file_id) if first else None,
+        photo_url=_photo_url(file_id) if file_id else None,
     )
 
 
 def _detail(profile: Profile) -> ProfileDetail:
-    base = _list_item(profile)
     photos = sorted(profile.photos or [], key=lambda p: p.position)
+    first_id = photos[0].file_id if photos else None
+    base = _list_item(profile, photo_file_id=first_id)
     user = profile.user
     return ProfileDetail(
         **base.model_dump(),
@@ -206,7 +210,7 @@ async def get_stats(
 @router.get("/profiles", response_model=list[ProfileListItem])
 async def admin_list_profiles(
     status_filter: str | None = Query(default=None, alias="status"),
-    limit: int = Query(default=50, ge=1, le=200),
+    limit: int = Query(default=25, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     _auth: AuthContext = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
@@ -226,7 +230,8 @@ async def admin_list_profiles(
         profiles = await list_profiles(session, status=status_filter, limit=limit, offset=offset)
     else:
         profiles = await list_profiles(session, limit=limit, offset=offset)
-    return [_list_item(p) for p in profiles]
+    thumb_ids = await first_photo_file_ids(session, [p.id for p in profiles])
+    return [_list_item(p, photo_file_id=thumb_ids.get(p.id)) for p in profiles]
 
 
 @router.get("/profiles/{profile_id}", response_model=ProfileDetail)
@@ -361,10 +366,12 @@ async def admin_users(
     session: AsyncSession = Depends(get_session),
 ) -> list[UserOut]:
     users = await search_users(session, query=q)
+    profile_ids = [u.profile.id for u in users if u.profile is not None]
+    thumb_ids = await first_photo_file_ids(session, profile_ids)
     out: list[UserOut] = []
     for u in users:
         profile = u.profile
-        photos = sorted(profile.photos or [], key=lambda p: p.position) if profile else []
+        file_id = thumb_ids.get(profile.id) if profile else None
         out.append(
             UserOut(
                 id=u.id,
@@ -378,7 +385,7 @@ async def admin_users(
                 profile_id=profile.id if profile else None,
                 profile_status=profile.status if profile else None,
                 profile_name=profile.name if profile else None,
-                photo_url=_photo_url(photos[0].file_id) if photos else None,
+                photo_url=_photo_url(file_id) if file_id else None,
             )
         )
     return out

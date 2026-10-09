@@ -34,6 +34,12 @@ type TelegramWebApp = {
   setBackgroundColor?: (color: string) => void;
   openTelegramLink?: (url: string) => void;
   openLink?: (url: string) => void;
+  showAlert?: (message: string, callback?: () => void) => void;
+  showPopup?: (params: {
+    title?: string;
+    message: string;
+    buttons?: Array<{ id?: string; type?: string; text?: string }>;
+  }, callback?: (id: string) => void) => void;
 };
 
 declare global {

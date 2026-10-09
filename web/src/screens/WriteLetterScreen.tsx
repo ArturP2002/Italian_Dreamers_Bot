@@ -70,9 +70,34 @@ export function WriteLetterScreen({ language }: Props) {
       });
       navigate(`/inbox/${created.id}`, { replace: true });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "";
-      if (msg.includes("contact_forbidden")) setError(t(language, "contactForbidden"));
-      else setError(t(language, "errorGeneric"));
+      const raw = e instanceof Error ? e.message : "";
+      let code = "";
+      try {
+        const parsed = JSON.parse(raw) as { detail?: { code?: string } | string };
+        if (parsed?.detail && typeof parsed.detail === "object") {
+          code = parsed.detail.code ?? "";
+        }
+      } catch {
+        /* plain text / substring fallback */
+      }
+      if (!code) {
+        if (raw.includes("duplicate")) code = "duplicate";
+        else if (raw.includes("contact_forbidden")) code = "contact_forbidden";
+        else if (raw.includes("soft_banned")) code = "soft_banned";
+        else if (raw.includes("pending_limit")) code = "pending_limit";
+      }
+
+      const textByCode: Record<string, string> = {
+        duplicate: t(language, "letterDuplicate"),
+        contact_forbidden: t(language, "contactForbidden"),
+        soft_banned: t(language, "letterSoftBanned"),
+        pending_limit: t(language, "letterPendingLimit"),
+      };
+      const message = textByCode[code] ?? t(language, "errorGeneric");
+      setError(message);
+      const tg = window.Telegram?.WebApp;
+      if (tg?.showAlert) tg.showAlert(message);
+      else window.alert(message);
     } finally {
       setBusy(false);
     }
