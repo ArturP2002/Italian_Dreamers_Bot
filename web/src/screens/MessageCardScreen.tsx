@@ -195,6 +195,12 @@ export function MessageCardScreen({ language, onCreditsChange }: Props) {
         <h2 className="letter-card__label">{t(language, "cardLetter")}</h2>
         <p className="letter-card__text">{letterText}</p>
 
+        {!isIncoming && item.status === "pending" ? (
+          <p className="home-meta" style={{ padding: "0 16px 12px" }}>
+            {t(language, "writePushHint")}
+          </p>
+        ) : null}
+
         {replyShown ? (
           <>
             <h2 className="letter-card__label">{t(language, "reply")}</h2>

@@ -124,6 +124,9 @@ export const messages = {
     writeFromProfile: "Письмо отправится от вашей анкеты.",
     writeFromSaved: "Имя и возраст — из вашего первого письма.",
     writePhotoOptional: "Необязательно: без нового фото отправится текущее.",
+    writePushHint:
+      "Чтобы получать уведомления об ответе, откройте чат с ботом и нажмите «Начать» (/start).",
+    writeOpenBot: "Открыть бота и нажать «Начать»",
     contactForbidden: "Уберите телефон, @username и ссылки из текста.",
     letterDuplicate:
       "У вас уже есть активное письмо или диалог с этим человеком. Откройте его в «Мои знакомства».",
@@ -362,6 +365,9 @@ export const messages = {
     writeFromProfile: "La lettera sarà inviata dal tuo profilo.",
     writeFromSaved: "Nome ed età dalla tua prima lettera.",
     writePhotoOptional: "Facoltativo: senza una nuova foto verrà inviata quella attuale.",
+    writePushHint:
+      "Per ricevere l’avviso quando rispondono, apri la chat del bot e premi «Avvia» (/start).",
+    writeOpenBot: "Apri il bot e premi «Avvia»",
     contactForbidden: "Togli telefono, @username e link dal testo.",
     letterDuplicate:
       "Hai già una lettera o una chat attiva con questa persona. Aprila in «I miei incontri».",

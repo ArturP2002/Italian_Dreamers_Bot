@@ -65,9 +65,17 @@ async def cmd_start(message: Message, command: CommandObject) -> None:
     payload = (command.args or "").strip()
     if re.fullmatch(r"write_\d+", payload):
         if lang == "it":
-            text, label = "Scrivi una lettera a questo profilo 👇", "✉️ Scrivi una lettera"
+            text = (
+                "Scrivi una lettera a questo profilo 👇\n\n"
+                "Hai già premuto «Avvia» — riceverai un avviso quando rispondono."
+            )
+            label = "✉️ Scrivi una lettera"
         else:
-            text, label = "Напишите письмо этой анкете 👇", "✉️ Написать письмо"
+            text = (
+                "Напишите письмо этой анкете 👇\n\n"
+                "Вы уже нажали «Начать» — когда вам ответят, придёт уведомление в этот чат."
+            )
+            label = "✉️ Написать письмо"
         await message.answer(
             text,
             reply_markup=InlineKeyboardMarkup(
@@ -86,16 +94,34 @@ async def cmd_start(message: Message, command: CommandObject) -> None:
     if message.from_user and re.fullmatch(r"ref_[A-Za-z0-9_-]{1,32}", payload):
         await _register_referral(message.from_user, payload[len("ref_"):])
 
+    if payload == "notify":
+        if lang == "it":
+            text = (
+                "✅ Perfetto. Ora il bot può inviarti notifiche "
+                "(nuove lettere, risposte, pagamento).\n\n"
+                "Apri l’app qui sotto."
+            )
+        else:
+            text = (
+                "✅ Готово. Теперь бот может присылать уведомления "
+                "(новые письма, ответы, оплата).\n\n"
+                "Откройте приложение кнопкой ниже."
+            )
+        await message.answer(text, reply_markup=webapp_keyboard(settings.webapp_url, language=lang))
+        return
+
     if lang == "it":
         text = (
             "<b>Italian Dreamers</b>\n\n"
             "Benvenuto. Tutto avviene nell'app: profilo, lettere, chat.\n"
+            "Premendo «Avvia» attivi anche le notifiche push del bot.\n"
             "Tocca il pulsante qui sotto per entrare."
         )
     else:
         text = (
             "<b>Italian Dreamers</b>\n\n"
             "Добро пожаловать. Анкета, письма и чат — в Mini App.\n"
+            "Нажав «Начать», вы также включаете push-уведомления от бота.\n"
             "Нажмите кнопку ниже, чтобы войти."
         )
 

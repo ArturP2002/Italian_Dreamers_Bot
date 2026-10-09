@@ -208,6 +208,7 @@ export type PublicConfig = {
   };
   limits: Record<string, number>;
   timezone: string;
+  bot_username?: string | null;
 };
 
 export type CoverQuestion = { id: number; ru: string; it: string };

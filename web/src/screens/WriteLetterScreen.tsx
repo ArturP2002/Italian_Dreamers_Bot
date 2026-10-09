@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { type Language, t, tf } from "../i18n/messages";
 import {
   createLetter,
+  fetchConfig,
   fetchWriteTarget,
   mediaUrl,
   type WriteTarget,
@@ -21,6 +22,7 @@ export function WriteLetterScreen({ language }: Props) {
   const [photo, setPhoto] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [botUsername, setBotUsername] = useState<string | null>(null);
 
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
@@ -28,6 +30,12 @@ export function WriteLetterScreen({ language }: Props) {
     if (!Number.isFinite(id)) return;
     void fetchWriteTarget(id).then(setTarget);
   }, [id]);
+
+  useEffect(() => {
+    void fetchConfig().then((cfg) => {
+      setBotUsername(cfg?.bot_username ?? null);
+    });
+  }, []);
 
   useEffect(() => {
     if (!photo) {
@@ -122,6 +130,23 @@ export function WriteLetterScreen({ language }: Props) {
       <h1 className="work-title">{t(language, "writeTitle")}</h1>
       <p className="work-body">{tf(language, "letterTo", { name: target.name })}</p>
       <p className="home-meta">{t(language, "writeHint")}</p>
+      <div className="write-push-hint">
+        <p>{t(language, "writePushHint")}</p>
+        {botUsername ? (
+          <button
+            type="button"
+            className="btn btn--block btn--ghost"
+            onClick={() => {
+              const url = `https://t.me/${botUsername}?start=notify`;
+              const tg = window.Telegram?.WebApp;
+              if (tg?.openTelegramLink) tg.openTelegramLink(url);
+              else window.open(url, "_blank", "noopener");
+            }}
+          >
+            {t(language, "writeOpenBot")}
+          </button>
+        ) : null}
+      </div>
 
       <div className="write-target">
         {target.photo_url ? (

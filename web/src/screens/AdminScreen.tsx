@@ -83,7 +83,8 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "stats", label: "Статистика" },
 ];
 
-const PROFILE_PAGE_SIZE = 25;
+/** Smaller page so «Показать ещё» appears earlier on real data. */
+const PROFILE_PAGE_SIZE = 12;
 
 function profileBelongsToTab(status: string, tab: Tab): boolean {
   if (tab === "new") return status === "new";
@@ -315,9 +316,13 @@ export function AdminScreen({ language }: Props) {
     try {
       if (tab === "new" || tab === "queue" || tab === "published") {
         const status = tab === "new" ? "new" : tab === "queue" ? "queue" : "published";
-        const page = await adminFetchProfiles(status, { limit: PROFILE_PAGE_SIZE, offset: 0 });
-        setItems(page);
-        setProfilesHasMore(page.length >= PROFILE_PAGE_SIZE);
+        // Fetch one extra row to know if another page exists.
+        const page = await adminFetchProfiles(status, {
+          limit: PROFILE_PAGE_SIZE + 1,
+          offset: 0,
+        });
+        setProfilesHasMore(page.length > PROFILE_PAGE_SIZE);
+        setItems(page.slice(0, PROFILE_PAGE_SIZE));
       } else if (tab === "ads") {
         setAds(await adminFetchAds(adFilter === "all" ? undefined : adFilter));
       } else if (tab === "complaints") {
@@ -342,14 +347,15 @@ export function AdminScreen({ language }: Props) {
     try {
       const status = tab === "new" ? "new" : tab === "queue" ? "queue" : "published";
       const page = await adminFetchProfiles(status, {
-        limit: PROFILE_PAGE_SIZE,
+        limit: PROFILE_PAGE_SIZE + 1,
         offset: items.length,
       });
+      const chunk = page.slice(0, PROFILE_PAGE_SIZE);
       setItems((prev) => {
         const seen = new Set(prev.map((i) => i.id));
-        return [...prev, ...page.filter((i) => !seen.has(i.id))];
+        return [...prev, ...chunk.filter((i) => !seen.has(i.id))];
       });
-      setProfilesHasMore(page.length >= PROFILE_PAGE_SIZE);
+      setProfilesHasMore(page.length > PROFILE_PAGE_SIZE);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Load failed");
     } finally {
@@ -892,15 +898,23 @@ export function AdminScreen({ language }: Props) {
               </li>
             ))}
           </ul>
+          {items.length > 0 ? (
+            <p className="admin-meta" style={{ marginTop: 12 }}>
+              Показано: {items.length}
+              {profilesHasMore ? "+" : ""}
+            </p>
+          ) : null}
           {profilesHasMore ? (
             <button
               type="button"
-              className="admin-btn admin-btn--block"
+              className="admin-btn admin-btn--primary admin-btn--block"
               disabled={profilesLoadingMore || busy}
               onClick={() => void loadMoreProfiles()}
             >
-              {profilesLoadingMore ? "Загрузка…" : "Ещё"}
+              {profilesLoadingMore ? "Загрузка…" : "Показать ещё"}
             </button>
+          ) : items.length > 0 ? (
+            <p className="admin-meta">Это все анкеты в разделе</p>
           ) : null}
         </>
       ) : null}

@@ -845,6 +845,28 @@
   display: block;
   width: 100%;
   margin: 12px 0 20px;
+  min-height: 48px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.write-push-hint {
+  margin: 12px 0 18px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: rgba(200, 167, 116, 0.16);
+  border: 1px solid rgba(200, 167, 116, 0.35);
+  color: var(--color-graphite);
+}
+
+.write-push-hint p {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.write-push-hint .btn {
+  margin-top: 0;
 }
 
 .admin-btn:disabled {

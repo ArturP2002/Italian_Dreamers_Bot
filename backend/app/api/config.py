@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from app.config import Settings, get_settings
+from app.services.telegram_api import get_bot_username
 
 router = APIRouter(tags=["config"])
 
@@ -8,6 +9,7 @@ router = APIRouter(tags=["config"])
 @router.get("/config")
 async def public_config(settings: Settings = Depends(get_settings)) -> dict:
     """Public price/limit placeholders for Mini App UI (no secrets)."""
+    bot_username = await get_bot_username(settings)
     return {
         "prices": {
             "message_credit_stars": settings.price_message_credit_stars,
@@ -23,4 +25,5 @@ async def public_config(settings: Settings = Depends(get_settings)) -> dict:
             "soft_ban_hours": settings.rate_soft_ban_hours,
         },
         "timezone": settings.app_timezone,
+        "bot_username": bot_username,
     }

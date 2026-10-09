@@ -210,7 +210,7 @@ async def get_stats(
 @router.get("/profiles", response_model=list[ProfileListItem])
 async def admin_list_profiles(
     status_filter: str | None = Query(default=None, alias="status"),
-    limit: int = Query(default=25, ge=1, le=100),
+    limit: int = Query(default=25, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     _auth: AuthContext = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
