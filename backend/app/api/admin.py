@@ -28,6 +28,7 @@ from app.services.complaints import get_complaint, list_complaints, resolve_comp
 from app.services.moderation import (
     admin_stats,
     approve_profile,
+    count_profiles,
     first_photo_file_ids,
     get_profile_admin,
     grant_credits,
@@ -207,31 +208,48 @@ async def get_stats(
     return await admin_stats(session)
 
 
-@router.get("/profiles", response_model=list[ProfileListItem])
+class ProfileListPage(BaseModel):
+    items: list[ProfileListItem]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
+
+
+@router.get("/profiles", response_model=ProfileListPage)
 async def admin_list_profiles(
     status_filter: str | None = Query(default=None, alias="status"),
     limit: int = Query(default=25, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     _auth: AuthContext = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
-) -> list[ProfileListItem]:
+) -> ProfileListPage:
+    status_arg: str | None = None
+    statuses_arg: list[str] | None = None
     if status_filter == "moderation":
-        profiles = await list_profiles(
-            session, status=ProfileStatus.NEW.value, limit=limit, offset=offset
-        )
+        status_arg = ProfileStatus.NEW.value
     elif status_filter == "queue":
-        profiles = await list_profiles(
-            session,
-            statuses=[ProfileStatus.QUEUED.value, ProfileStatus.AWAITING_PAYMENT.value],
-            limit=limit,
-            offset=offset,
-        )
+        statuses_arg = [ProfileStatus.QUEUED.value, ProfileStatus.AWAITING_PAYMENT.value]
     elif status_filter:
-        profiles = await list_profiles(session, status=status_filter, limit=limit, offset=offset)
-    else:
-        profiles = await list_profiles(session, limit=limit, offset=offset)
+        status_arg = status_filter
+
+    total = await count_profiles(session, status=status_arg, statuses=statuses_arg)
+    profiles = await list_profiles(
+        session,
+        status=status_arg,
+        statuses=statuses_arg,
+        limit=limit,
+        offset=offset,
+    )
     thumb_ids = await first_photo_file_ids(session, [p.id for p in profiles])
-    return [_list_item(p, photo_file_id=thumb_ids.get(p.id)) for p in profiles]
+    items = [_list_item(p, photo_file_id=thumb_ids.get(p.id)) for p in profiles]
+    return ProfileListPage(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+        has_more=(offset + len(items)) < total,
+    )
 
 
 @router.get("/profiles/{profile_id}", response_model=ProfileDetail)

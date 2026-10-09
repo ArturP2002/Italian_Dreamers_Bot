@@ -67,6 +67,32 @@ async def first_photo_file_ids(
     return out
 
 
+def _profile_status_filter(
+    *,
+    status: str | None = None,
+    statuses: list[str] | None = None,
+):
+    if status:
+        return Profile.status == status
+    if statuses:
+        return Profile.status.in_(statuses)
+    return None
+
+
+async def count_profiles(
+    session: AsyncSession,
+    *,
+    status: str | None = None,
+    statuses: list[str] | None = None,
+) -> int:
+    stmt = select(func.count()).select_from(Profile)
+    filt = _profile_status_filter(status=status, statuses=statuses)
+    if filt is not None:
+        stmt = stmt.where(filt)
+    result = await session.execute(stmt)
+    return int(result.scalar_one())
+
+
 async def list_profiles(
     session: AsyncSession,
     *,
@@ -83,10 +109,9 @@ async def list_profiles(
         .limit(limit)
         .offset(offset)
     )
-    if status:
-        stmt = stmt.where(Profile.status == status)
-    elif statuses:
-        stmt = stmt.where(Profile.status.in_(statuses))
+    filt = _profile_status_filter(status=status, statuses=statuses)
+    if filt is not None:
+        stmt = stmt.where(filt)
     result = await session.execute(stmt)
     return list(result.scalars().all())
 

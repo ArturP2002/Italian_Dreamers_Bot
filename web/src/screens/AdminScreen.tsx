@@ -83,8 +83,8 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "stats", label: "Статистика" },
 ];
 
-/** Smaller page so «Показать ещё» appears earlier on real data. */
-const PROFILE_PAGE_SIZE = 12;
+/** Page size for admin profile lists (Новые / Очередь / Опубликованы). */
+const PROFILE_PAGE_SIZE = 10;
 
 function profileBelongsToTab(status: string, tab: Tab): boolean {
   if (tab === "new") return status === "new";
@@ -243,6 +243,7 @@ export function AdminScreen({ language }: Props) {
   const [tab, setTab] = useState<Tab>("new");
   const [items, setItems] = useState<AdminProfileListItem[]>([]);
   const [profilesHasMore, setProfilesHasMore] = useState(false);
+  const [profilesTotal, setProfilesTotal] = useState(0);
   const [profilesLoadingMore, setProfilesLoadingMore] = useState(false);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [payments, setPayments] = useState<AdminPayment[]>([]);
@@ -281,7 +282,10 @@ export function AdminScreen({ language }: Props) {
       syncScheduleLocal(d);
       setItems((prev) => {
         if (!profileBelongsToTab(d.status, tab)) {
-          return prev.filter((i) => i.id !== d.id);
+          setProfilesTotal((t) => Math.max(0, t - 1));
+          const next = prev.filter((i) => i.id !== d.id);
+          setProfilesHasMore(next.length < Math.max(0, profilesTotal - 1));
+          return next;
         }
         const mapped = toListItem(d);
         const idx = prev.findIndex((i) => i.id === d.id);
@@ -291,7 +295,7 @@ export function AdminScreen({ language }: Props) {
         return next;
       });
     },
-    [tab],
+    [tab, profilesTotal],
   );
 
   const applyAdUpdate = useCallback(
@@ -316,13 +320,13 @@ export function AdminScreen({ language }: Props) {
     try {
       if (tab === "new" || tab === "queue" || tab === "published") {
         const status = tab === "new" ? "new" : tab === "queue" ? "queue" : "published";
-        // Fetch one extra row to know if another page exists.
         const page = await adminFetchProfiles(status, {
-          limit: PROFILE_PAGE_SIZE + 1,
+          limit: PROFILE_PAGE_SIZE,
           offset: 0,
         });
-        setProfilesHasMore(page.length > PROFILE_PAGE_SIZE);
-        setItems(page.slice(0, PROFILE_PAGE_SIZE));
+        setItems(page.items);
+        setProfilesTotal(page.total);
+        setProfilesHasMore(page.has_more);
       } else if (tab === "ads") {
         setAds(await adminFetchAds(adFilter === "all" ? undefined : adFilter));
       } else if (tab === "complaints") {
@@ -347,15 +351,15 @@ export function AdminScreen({ language }: Props) {
     try {
       const status = tab === "new" ? "new" : tab === "queue" ? "queue" : "published";
       const page = await adminFetchProfiles(status, {
-        limit: PROFILE_PAGE_SIZE + 1,
+        limit: PROFILE_PAGE_SIZE,
         offset: items.length,
       });
-      const chunk = page.slice(0, PROFILE_PAGE_SIZE);
       setItems((prev) => {
         const seen = new Set(prev.map((i) => i.id));
-        return [...prev, ...chunk.filter((i) => !seen.has(i.id))];
+        return [...prev, ...page.items.filter((i) => !seen.has(i.id))];
       });
-      setProfilesHasMore(page.length > PROFILE_PAGE_SIZE);
+      setProfilesTotal(page.total);
+      setProfilesHasMore(page.has_more);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Load failed");
     } finally {
@@ -899,22 +903,23 @@ export function AdminScreen({ language }: Props) {
             ))}
           </ul>
           {items.length > 0 ? (
-            <p className="admin-meta" style={{ marginTop: 12 }}>
-              Показано: {items.length}
-              {profilesHasMore ? "+" : ""}
-            </p>
-          ) : null}
-          {profilesHasMore ? (
-            <button
-              type="button"
-              className="admin-btn admin-btn--primary admin-btn--block"
-              disabled={profilesLoadingMore || busy}
-              onClick={() => void loadMoreProfiles()}
-            >
-              {profilesLoadingMore ? "Загрузка…" : "Показать ещё"}
-            </button>
-          ) : items.length > 0 ? (
-            <p className="admin-meta">Это все анкеты в разделе</p>
+            <div className="admin-list-footer">
+              <p className="admin-list-footer__count">
+                Показано {items.length} из {profilesTotal}
+              </p>
+              {profilesHasMore ? (
+                <button
+                  type="button"
+                  className="admin-btn admin-btn--primary admin-btn--block"
+                  disabled={profilesLoadingMore || busy}
+                  onClick={() => void loadMoreProfiles()}
+                >
+                  {profilesLoadingMore ? "Загрузка…" : "Показать ещё"}
+                </button>
+              ) : (
+                <p className="admin-list-footer__done">Это все анкеты в разделе</p>
+              )}
+            </div>
           ) : null}
         </>
       ) : null}

@@ -850,6 +850,32 @@
   font-weight: 600;
 }
 
+.admin-list-footer {
+  margin: 14px 0 28px;
+  padding: 14px;
+  border-radius: var(--radius-md);
+  background: #fff;
+  border: 1px solid rgba(26, 21, 17, 0.12);
+  color: var(--color-graphite);
+}
+
+.admin-list-footer__count {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-graphite);
+}
+
+.admin-list-footer__done {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-secondary);
+}
+
+.admin-list-footer .admin-btn--block {
+  margin: 0;
+}
+
 .write-push-hint {
   margin: 12px 0 18px;
   padding: 12px 14px;

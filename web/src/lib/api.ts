@@ -431,16 +431,43 @@ export async function adminFetchStats(): Promise<AdminStats | null> {
   return apiFetch<AdminStats>("/api/admin/stats");
 }
 
+export type AdminProfileListPage = {
+  items: AdminProfileListItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+};
+
 export async function adminFetchProfiles(
   status?: string,
   opts?: { limit?: number; offset?: number },
-): Promise<AdminProfileListItem[]> {
+): Promise<AdminProfileListPage> {
   const params = new URLSearchParams();
   if (status) params.set("status", status);
   if (opts?.limit != null) params.set("limit", String(opts.limit));
   if (opts?.offset != null) params.set("offset", String(opts.offset));
   const q = params.toString() ? `?${params}` : "";
-  return (await apiFetch<AdminProfileListItem[]>(`/api/admin/profiles${q}`)) ?? [];
+  const data = await apiFetch<AdminProfileListPage | AdminProfileListItem[]>(`/api/admin/profiles${q}`);
+  // Backward-compatible if an old API still returns a bare array.
+  if (Array.isArray(data)) {
+    return {
+      items: data,
+      total: data.length,
+      limit: opts?.limit ?? data.length,
+      offset: opts?.offset ?? 0,
+      has_more: false,
+    };
+  }
+  return (
+    data ?? {
+      items: [],
+      total: 0,
+      limit: opts?.limit ?? 0,
+      offset: opts?.offset ?? 0,
+      has_more: false,
+    }
+  );
 }
 
 export async function adminFetchProfile(id: number): Promise<AdminProfileDetail | null> {
