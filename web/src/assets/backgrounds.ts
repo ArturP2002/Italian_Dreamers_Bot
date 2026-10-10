@@ -33,6 +33,12 @@ export const guideAssets = {
   it: { pdf: "/guide/guide_men.pdf", audio: "/guide/guide_men.ogg" },
 } as const;
 
+export const introVideo = {
+  poster: "/backgrounds/bg_positano_run.jpg",
+  ru: "/intro/intro_ru.mp4",
+  it: "/intro/intro_it.mp4",
+} as const;
+
 export const guidePhotos = {
   listen: "/photos/guide_listen_spb_kazan_couple.jpg",
   read: "/photos/guide_read_rome_sunset_kiss.jpg",
