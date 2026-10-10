@@ -381,16 +381,18 @@ export async function fetchProfile(): Promise<Profile | null> {
   return apiFetch<Profile>("/api/me/profile");
 }
 
-export async function updateProfile(payload: ProfileUpdatePayload): Promise<Profile | null> {
-  return apiFetch<Profile>("/api/me/profile", {
+/** Throws on error; the message carries the API detail (e.g. `contact_forbidden`). */
+export async function updateProfile(payload: ProfileUpdatePayload): Promise<Profile> {
+  return apiFetchJsonOrThrow<Profile>("/api/me/profile", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
 }
 
-export async function submitProfile(): Promise<Profile | null> {
-  return apiFetch<Profile>("/api/me/profile/submit", { method: "POST" });
+/** Throws on error; the message carries the API detail (e.g. `contact_forbidden`). */
+export async function submitProfile(): Promise<Profile> {
+  return apiFetchJsonOrThrow<Profile>("/api/me/profile/submit", { method: "POST" });
 }
 
 export async function uploadProfilePhoto(file: File): Promise<Profile | null> {

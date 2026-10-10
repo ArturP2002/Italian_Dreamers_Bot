@@ -35,7 +35,9 @@ from app.services.greeting_video import (
 from app.services.notify import notify_admins_profile_submitted
 from app.services.payments import create_publish_payment, send_publish_invoice
 from app.services.profiles import (
+    CONTACT_CHECKED_FIELDS,
     assert_editable,
+    fields_with_contacts,
     get_or_create_draft,
     get_user_profile,
     validate_for_submit,
@@ -227,6 +229,12 @@ async def update_profile(
         )
     if "cover_answer" in data and data["cover_answer"] is not None:
         data["cover_answer"] = data["cover_answer"].strip()
+    contact_fields = fields_with_contacts(data)
+    if contact_fields:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "contact_forbidden", "message": "Contact details are not allowed", "fields": contact_fields},
+        )
 
     for key, value in data.items():
         setattr(profile, key, value)
@@ -400,6 +408,13 @@ async def submit_profile(
         profile.telegram_username = auth.user.telegram_username
     if not profile.gender and auth.user.gender:
         profile.gender = auth.user.gender
+
+    contact_fields = fields_with_contacts({key: getattr(profile, key) for key in CONTACT_CHECKED_FIELDS})
+    if contact_fields:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "contact_forbidden", "message": "Contact details are not allowed", "fields": contact_fields},
+        )
 
     errors = validate_for_submit(profile)
     if errors:

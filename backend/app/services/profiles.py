@@ -7,6 +7,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models import Profile, ProfileStatus, User
+from app.services.anti_contact import contains_contact_info
+
+# Published in the channel, so contacts here would bypass the paid chat.
+CONTACT_CHECKED_FIELDS = (
+    "name",
+    "country",
+    "city",
+    "profession",
+    "hobbies",
+    "about",
+    "desired_partner",
+    "cover_answer",
+)
+
+
+def fields_with_contacts(values: dict) -> list[str]:
+    return [
+        key
+        for key in CONTACT_CHECKED_FIELDS
+        if isinstance(values.get(key), str) and contains_contact_info(values[key])
+    ]
 
 
 EDITABLE_STATUSES = frozenset(

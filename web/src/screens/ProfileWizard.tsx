@@ -178,17 +178,23 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
     setForm(draft);
   }, [draft]);
 
+  const profileErrorMessage = (e: unknown) =>
+    e instanceof Error && e.message.includes("contact_forbidden")
+      ? t(language, "contactForbiddenProfile")
+      : t(language, "errorGeneric");
+
   const save = async (payload: ProfileUpdatePayload) => {
     setBusy(true);
     setError(null);
-    const updated = await updateProfile(payload);
-    setBusy(false);
-    if (!updated) {
-      setError(t(language, "errorGeneric"));
+    try {
+      setProfile(await updateProfile(payload));
+      return true;
+    } catch (e) {
+      setError(profileErrorMessage(e));
       return false;
+    } finally {
+      setBusy(false);
     }
-    setProfile(updated);
-    return true;
   };
 
   const goNext = () => setStep((s) => Math.min(TOTAL_STEPS, s + 1));
@@ -299,11 +305,14 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
         )
           return;
         setBusy(true);
-        const submitted = await submitProfile();
-        setBusy(false);
-        if (!submitted) {
-          setError(t(language, "errorGeneric"));
+        let submitted: Profile;
+        try {
+          submitted = await submitProfile();
+        } catch (e) {
+          setError(profileErrorMessage(e));
           return;
+        } finally {
+          setBusy(false);
         }
         setProfile(submitted);
         await onMeRefresh();

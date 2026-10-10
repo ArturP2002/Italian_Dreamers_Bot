@@ -135,7 +135,10 @@ export const messages = {
     writePushHint:
       "Чтобы получать уведомления об ответе, откройте чат с ботом и нажмите «Начать» (/start).",
     writeOpenBot: "Открыть бота и нажать «Начать»",
-    contactForbidden: "Уберите телефон, @username и ссылки из текста.",
+    contactForbidden:
+      "Уберите из текста контакты: телефон, @ник, ссылки, почту и названия мессенджеров и соцсетей (Instagram, WhatsApp и т.п.).",
+    contactForbiddenProfile:
+      "Уберите из анкеты контакты: телефон, @ник, ссылки, почту и названия мессенджеров и соцсетей (Instagram, WhatsApp и т.п.). Вам смогут написать через бота.",
     letterDuplicate:
       "У вас уже есть активное письмо или диалог с этим человеком. Откройте его в «Мои знакомства».",
     letterSoftBanned: "Слишком много писем за короткое время. Попробуйте позже.",
@@ -392,7 +395,10 @@ export const messages = {
     writePushHint:
       "Per ricevere l’avviso quando rispondono, apri la chat del bot e premi «Avvia» (/start).",
     writeOpenBot: "Apri il bot e premi «Avvia»",
-    contactForbidden: "Togli telefono, @username e link dal testo.",
+    contactForbidden:
+      "Togli dal testo i contatti: telefono, @username, link, e-mail e nomi di app di messaggistica o social (Instagram, WhatsApp ecc.).",
+    contactForbiddenProfile:
+      "Togli dal profilo i contatti: telefono, @username, link, e-mail e nomi di app di messaggistica o social (Instagram, WhatsApp ecc.). Potranno scriverti tramite il bot.",
     letterDuplicate:
       "Hai già una lettera o una chat attiva con questa persona. Aprila in «I miei incontri».",
     letterSoftBanned: "Troppe lettere in poco tempo. Riprova più tardi.",
