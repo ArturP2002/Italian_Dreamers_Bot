@@ -169,6 +169,8 @@ export const messages = {
     ageConsentHint: "Italian Dreamers — только для взрослых.",
     continue: "Продолжить",
 
+    introVideoWatch: "Смотреть вступление",
+    introVideoClose: "Закрыть",
     guideTitle: "Советы для анкеты",
     guideBody: "Хотите несколько советов, которые помогут сделать анкету классной?",
     guideListen: "Прослушать",
@@ -201,7 +203,7 @@ export const messages = {
     qAgeMax: "До",
     qVideo: "Видео-приветствие",
     qVideoHint:
-      "По желанию. Запишите короткое видео: поздоровайтесь и расскажите немного о себе. Оно будет первым в вашей анкете в канале. Этот шаг можно пропустить.",
+      "По желанию. Запишите короткое видео: поздоровайтесь и расскажите немного о себе. Оно будет в вашей анкете в канале. Этот шаг можно пропустить.",
     videoLimitHint: "До 50 МБ, лучше не длиннее минуты.",
     videoAdd: "Записать или выбрать видео",
     videoReplace: "Заменить видео",
@@ -420,6 +422,8 @@ export const messages = {
     ageConsentHint: "Italian Dreamers è solo per adulti.",
     continue: "Continua",
 
+    introVideoWatch: "Guarda l’introduzione",
+    introVideoClose: "Chiudi",
     guideTitle: "Consigli per il profilo",
     guideBody: "Vuoi alcuni consigli per rendere il profilo più attraente?",
     guideListen: "Ascolta",
@@ -452,7 +456,7 @@ export const messages = {
     qAgeMax: "A",
     qVideo: "Video di saluto",
     qVideoHint:
-      "Facoltativo. Registra un breve video: saluta e racconta qualcosa di te. Sarà il primo elemento del tuo profilo nel canale. Puoi saltare questo passaggio.",
+      "Facoltativo. Registra un breve video: saluta e racconta qualcosa di te. Sarà nel tuo profilo nel canale. Puoi saltare questo passaggio.",
     videoLimitHint: "Fino a 50 MB, meglio non oltre un minuto.",
     videoAdd: "Registra o scegli un video",
     videoReplace: "Sostituisci video",
