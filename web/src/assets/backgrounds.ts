@@ -22,8 +22,8 @@ export const profileIntroPhotos = {
 } as const;
 
 export const homeAssets = {
-  matches: "/photos/home_matches_rome_night_couple.jpg",
-  profile: "/photos/home_profile_spb_winter_couple.jpg",
+  matches: "/photos/home_matches_spb_winter_couple.jpg",
+  profile: "/photos/home_profile_rome_night_couple.jpg",
   credits: "/photos/home_credits_snow_girl.jpg",
 } as const;
 
