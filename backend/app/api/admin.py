@@ -25,6 +25,7 @@ from app.services.ads import (
 )
 from app.services.channel import publish_profile_to_channel
 from app.services.complaints import get_complaint, list_complaints, resolve_complaint
+from app.services.greeting_video import video_url
 from app.services.moderation import (
     admin_stats,
     approve_profile,
@@ -90,7 +91,7 @@ class ProfileDetail(ProfileListItem):
     age_max: int
     cover_question_id: int | None
     cover_answer: str | None
-    dream_location: str | None
+    greeting_video_url: str | None = None
     photos: list[PhotoOut]
     message_credits: int
     is_blocked: bool
@@ -189,7 +190,7 @@ def _detail(profile: Profile) -> ProfileDetail:
         age_max=profile.age_max,
         cover_question_id=profile.cover_question_id,
         cover_answer=profile.cover_answer,
-        dream_location=profile.dream_location,
+        greeting_video_url=video_url(profile.greeting_video_file_id),
         photos=[PhotoOut(id=p.id, position=p.position, url=_photo_url(p.file_id)) for p in photos],
         message_credits=user.message_credits if user else 0,
         is_blocked=user.is_blocked if user else False,

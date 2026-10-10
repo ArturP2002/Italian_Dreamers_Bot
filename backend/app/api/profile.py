@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -22,7 +23,15 @@ from app.models import (
     PublicationOption,
     WantsChildren,
 )
-from app.services.cover_questions import COVER_QUESTIONS, DREAM_LOCATIONS
+from app.services.cover_questions import COVER_QUESTIONS
+from app.services.greeting_video import (
+    MAX_VIDEO_BYTES,
+    MEDIA_VIDEOS,
+    VIDEO_EXTENSIONS,
+    normalize_to_mp4,
+    remove_video,
+    video_url,
+)
 from app.services.notify import notify_admins_profile_submitted
 from app.services.payments import create_publish_payment, send_publish_invoice
 from app.services.profiles import (
@@ -70,7 +79,7 @@ class ProfileOut(BaseModel):
     personal_data_agreement: bool
     cover_question_id: int | None
     cover_answer: str | None
-    dream_location: str | None
+    greeting_video_url: str | None = None
     moderation_feedback: str | None
     scheduled_at: datetime | None = None
     paid_at: datetime | None = None
@@ -101,7 +110,6 @@ class ProfileUpdate(BaseModel):
     personal_data_agreement: bool | None = None
     cover_question_id: int | None = Field(default=None, ge=1, le=9)
     cover_answer: str | None = Field(default=None, max_length=70)
-    dream_location: str | None = None
 
 
 class CoverQuestionsOut(BaseModel):
@@ -148,7 +156,7 @@ def _serialize(profile: Profile) -> ProfileOut:
         personal_data_agreement=profile.personal_data_agreement,
         cover_question_id=profile.cover_question_id,
         cover_answer=profile.cover_answer,
-        dream_location=profile.dream_location,
+        greeting_video_url=video_url(profile.greeting_video_file_id),
         moderation_feedback=profile.moderation_feedback,
         scheduled_at=profile.scheduled_at,
         paid_at=profile.paid_at,
@@ -200,9 +208,6 @@ async def update_profile(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
     data = body.model_dump(exclude_unset=True)
-    if "dream_location" in data and data["dream_location"] is not None:
-        if data["dream_location"] not in DREAM_LOCATIONS:
-            raise HTTPException(status_code=400, detail="Invalid dream_location")
     if "telegram_username" in data:
         data["telegram_username"] = _normalize_username(data["telegram_username"])
     if "gender" in data and data["gender"] is not None:
@@ -316,6 +321,67 @@ async def delete_photo(
         session.add(photo)
     await session.commit()
     await session.refresh(profile, attribute_names=["photos"])
+    return _serialize(profile)
+
+
+@router.post("/video", response_model=ProfileOut)
+async def upload_greeting_video(
+    file: UploadFile = File(...),
+    auth: AuthContext = Depends(get_auth_context),
+    session: AsyncSession = Depends(get_session),
+) -> ProfileOut:
+    profile = await get_or_create_draft(session, auth.user)
+    try:
+        assert_editable(profile)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    content_type = (file.content_type or "").lower()
+    suffix = Path(file.filename or "").suffix.lower()
+    if not content_type.startswith("video/") and suffix not in VIDEO_EXTENSIONS.values():
+        raise HTTPException(status_code=400, detail="Only video files allowed")
+    ext = VIDEO_EXTENSIONS.get(content_type) or suffix or ".mp4"
+
+    dest = MEDIA_VIDEOS / f"{uuid.uuid4().hex}{ext}"
+    with dest.open("wb") as fh:
+        shutil.copyfileobj(file.file, fh, length=1024 * 1024)
+    size = dest.stat().st_size
+    if size == 0:
+        dest.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail="Empty file")
+    if size > MAX_VIDEO_BYTES:
+        dest.unlink(missing_ok=True)
+        raise HTTPException(status_code=413, detail="video_too_large")
+
+    final = await normalize_to_mp4(dest)
+    previous = profile.greeting_video_file_id
+    profile.greeting_video_file_id = f"local:{final.name}"
+    session.add(profile)
+    await session.commit()
+    remove_video(previous)
+    profile = await get_user_profile(session, auth.user.id)
+    assert profile is not None
+    return _serialize(profile)
+
+
+@router.delete("/video", response_model=ProfileOut)
+async def delete_greeting_video(
+    auth: AuthContext = Depends(get_auth_context),
+    session: AsyncSession = Depends(get_session),
+) -> ProfileOut:
+    profile = await get_or_create_draft(session, auth.user)
+    try:
+        assert_editable(profile)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    previous = profile.greeting_video_file_id
+    profile.greeting_video_file_id = None
+    session.add(profile)
+    await session.commit()
+    remove_video(previous)
+    profile = await get_user_profile(session, auth.user.id)
+    assert profile is not None
     return _serialize(profile)
 
 

@@ -38,7 +38,7 @@ async def telegram_call(
         return {"ok": True, "result": {"message_id": 0}, "skipped": True}
 
     url = f"https://api.telegram.org/bot{settings.bot_token}/{method}"
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with httpx.AsyncClient(timeout=180.0 if files else 60.0) as client:
         if files:
             response = await client.post(url, data=data or {}, files=files)
         else:
@@ -154,15 +154,31 @@ async def send_photo_album(
     caption: str | None = None,
 ) -> dict[str, Any]:
     """Send 2–10 photos as one album. Items are Telegram file_ids/URLs or local paths."""
+    return await send_media_album(
+        settings, chat_id, [("photo", photo) for photo in photos], caption=caption
+    )
+
+
+async def send_media_album(
+    settings: Settings,
+    chat_id: int,
+    items: list[tuple[str, str | Path]],
+    *,
+    caption: str | None = None,
+) -> dict[str, Any]:
+    """Send 2–10 photos/videos as one album; caption goes on the first item."""
     media: list[dict[str, Any]] = []
-    local_paths: dict[str, Path] = {}
-    for idx, photo in enumerate(photos):
-        if isinstance(photo, Path):
-            attach_name = f"photo{idx}"
-            local_paths[attach_name] = photo
-            item: dict[str, Any] = {"type": "photo", "media": f"attach://{attach_name}"}
+    local_paths: dict[str, tuple[Path, str]] = {}
+    for idx, (kind, source) in enumerate(items):
+        if isinstance(source, Path):
+            attach_name = f"{kind}{idx}"
+            mime = "video/mp4" if kind == "video" else "image/jpeg"
+            local_paths[attach_name] = (source, mime)
+            item: dict[str, Any] = {"type": kind, "media": f"attach://{attach_name}"}
         else:
-            item = {"type": "photo", "media": photo}
+            item = {"type": kind, "media": source}
+        if kind == "video":
+            item["supports_streaming"] = True
         if idx == 0 and caption:
             item["caption"] = caption
             item["parse_mode"] = "HTML"
@@ -173,8 +189,8 @@ async def send_photo_album(
 
     with ExitStack() as stack:
         files = {
-            name: (path.name, stack.enter_context(path.open("rb")), "image/jpeg")
-            for name, path in local_paths.items()
+            name: (path.name, stack.enter_context(path.open("rb")), mime)
+            for name, (path, mime) in local_paths.items()
         }
         return await telegram_call(
             settings,

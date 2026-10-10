@@ -11,15 +11,6 @@ export type BackgroundKey = keyof typeof backgroundAssets;
 /** Loading / splash uses the final composed poster, not the raw pool. */
 export const loadingPoster = "/Loading_Photo.jpg";
 
-export const dreamLocationAssets = {
-  positano: "/dreams/positano.jpg",
-  rome: "/dreams/rome.jpg",
-  milan: "/dreams/milan.jpg",
-  other: "/dreams/other.jpg",
-} as const;
-
-export type DreamLocationKey = keyof typeof dreamLocationAssets;
-
 export const profileIntroAssets = {
   ru: "/photos/profile_intro_ru.jpg",
   it: "/photos/profile_intro_it.jpg",

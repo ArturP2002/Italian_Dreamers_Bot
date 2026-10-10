@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { dreamLocationLabel, type Language, t } from "../i18n/messages";
+import { type Language, t } from "../i18n/messages";
 import {
   adminActivateAdNow,
   adminApproveAd,
@@ -582,8 +582,17 @@ export function AdminScreen({ language }: Props) {
             {detail.city}, {detail.country} · {detail.profession}
           </p>
           <p className="admin-meta">{familyLineRu(detail)}</p>
-          {detail.dream_location ? (
-            <p className="admin-meta">Мечтает увидеть: {dreamLocationLabel("ru", detail.dream_location)}</p>
+          {detail.greeting_video_url ? (
+            <>
+              <h3 className="admin-section-label">Видео-приветствие</h3>
+              <video
+                className="greeting-video"
+                src={mediaUrl(detail.greeting_video_url)}
+                controls
+                playsInline
+                preload="metadata"
+              />
+            </>
           ) : null}
           <h3 className="admin-section-label">О себе</h3>
           <p className="admin-body">{detail.about}</p>

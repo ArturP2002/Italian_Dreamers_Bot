@@ -189,8 +189,8 @@ class Profile(Base):
     # Channel splash (Unical_Post): 1 of 9 questions + answer ≤70
     cover_question_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     cover_answer: Mapped[str | None] = mapped_column(String(70), nullable=True)
-    # «Мечтаю увидеть» location key for cover art
-    dream_location: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Optional greeting video, sent first in the channel album ("local:<file>")
+    greeting_video_file_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     moderation_feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

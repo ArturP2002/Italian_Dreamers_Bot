@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { dreamLocationLabel, type Language, t, tf } from "../i18n/messages";
+import { type Language, t, tf } from "../i18n/messages";
 import {
   buyMessageCredits,
   fetchConfig,
@@ -168,12 +168,6 @@ export function MessageCardScreen({ language, onCreditsChange }: Props) {
             {!isIncoming && item.profile_city ? <p>{item.profile_city}</p> : null}
           </div>
         </div>
-
-        {!isIncoming && item.profile_dream ? (
-          <p className="letter-card__dream">
-            {t(language, "cardDream")}: {dreamLocationLabel(language, item.profile_dream)}
-          </p>
-        ) : null}
 
         <div className="letter-card__toggle">
           <button

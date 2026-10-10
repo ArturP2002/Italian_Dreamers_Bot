@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { dreamLocationAssets, guideAssets, type DreamLocationKey } from "../assets/backgrounds";
-import { COVER_QUESTIONS, dreamLocationLabel, type Language, type MessageKey, tf, t } from "../i18n/messages";
+import { guideAssets } from "../assets/backgrounds";
+import { COVER_QUESTIONS, type Language, type MessageKey, tf, t } from "../i18n/messages";
 import {
+  deleteGreetingVideo,
   deleteProfilePhoto,
   fetchProfile,
   mediaUrl,
   patchGender,
   submitProfile,
   updateProfile,
+  uploadGreetingVideo,
   uploadProfilePhoto,
   type MeUser,
   type Profile,
@@ -17,6 +19,8 @@ import {
 import { ProfileIntroScreen } from "./ProfileIntroScreen";
 
 const TOTAL_STEPS = 12;
+const VIDEO_STEP = 9;
+const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
 
 type Phase = "loading" | "intro" | "gate" | "guide" | "steps" | "done";
 
@@ -36,8 +40,7 @@ function resumeStepFromProfile(p: Profile): number {
   // Step 6 has DB defaults; if about is empty, re-show family then bio.
   if (!p.about.trim()) return 6;
   if (!p.desired_partner.trim()) return 8;
-  if (!p.dream_location) return 9;
-  if (!p.cover_question_id || !p.cover_answer?.trim()) return 10;
+  if (!p.cover_question_id || !p.cover_answer?.trim()) return p.greeting_video_url ? 10 : VIDEO_STEP;
   if ((p.photos?.length ?? 0) < 3) return 11;
   return 12;
 }
@@ -52,7 +55,7 @@ function profileHasDraftProgress(p: Profile): boolean {
       p.profession.trim() ||
       p.about.trim() ||
       p.desired_partner.trim() ||
-      p.dream_location ||
+      p.greeting_video_url ||
       p.cover_question_id ||
       p.cover_answer?.trim() ||
       (p.photos?.length ?? 0) > 0,
@@ -112,7 +115,9 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
   const [ageOk, setAgeOk] = useState(Boolean(me?.gender));
   const [consent, setConsent] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const [videoProgress, setVideoProgress] = useState<number | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -163,7 +168,6 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
       desired_partner: profile?.desired_partner ?? "",
       age_min: profile?.age_min ? String(profile.age_min) : "18",
       age_max: profile?.age_max ? String(profile.age_max) : "99",
-      dream_location: (profile?.dream_location as DreamLocationKey | null) ?? null,
       cover_question_id: profile?.cover_question_id ?? null,
       cover_answer: profile?.cover_answer ?? "",
       telegram_username: profile?.telegram_username ?? me?.username ?? "",
@@ -265,9 +269,8 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
           return;
         break;
       }
-      case 9: {
-        if (!form.dream_location) return setError(t(language, "fieldRequired"));
-        if (!(await save({ dream_location: form.dream_location }))) return;
+      case VIDEO_STEP: {
+        if (videoProgress !== null) return;
         break;
       }
       case 10: {
@@ -333,6 +336,32 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
     const refreshed = await fetchProfile();
     if (refreshed) setProfile(refreshed);
     setBusy(false);
+  };
+
+  const onVideoPicked = async (file: File | undefined) => {
+    if (!file) return;
+    setError(null);
+    if (file.size > MAX_VIDEO_BYTES) {
+      setError(t(language, "videoTooLarge"));
+      return;
+    }
+    setVideoProgress(0);
+    const result = await uploadGreetingVideo(file, setVideoProgress);
+    setVideoProgress(null);
+    if (result.ok) {
+      setProfile(result.profile);
+    } else {
+      setError(t(language, result.reason === "too_large" ? "videoTooLarge" : "errorGeneric"));
+    }
+  };
+
+  const onVideoRemove = async () => {
+    setError(null);
+    setBusy(true);
+    const updated = await deleteGreetingVideo();
+    setBusy(false);
+    if (updated) setProfile(updated);
+    else setError(t(language, "errorGeneric"));
   };
 
   if (phase === "loading") {
@@ -507,10 +536,17 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
                 {t(language, "myProfileChildren")}: {t(language, profile.has_children ? "yes" : "no")} ·{" "}
                 {t(language, "myProfileWantsChildren")}: {t(language, wantsKey)}
               </p>
-              {profile.dream_location ? (
-                <p className="my-profile-card__meta">
-                  {t(language, "cardDream")}: {dreamLocationLabel(language, profile.dream_location)}
-                </p>
+              {profile.greeting_video_url ? (
+                <>
+                  <h3>{t(language, "myProfileVideo")}</h3>
+                  <video
+                    className="greeting-video"
+                    src={mediaUrl(profile.greeting_video_url)}
+                    controls
+                    playsInline
+                    preload="metadata"
+                  />
+                </>
               ) : null}
 
               <h3>{t(language, "myProfileAbout")}</h3>
@@ -544,9 +580,22 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
     );
   }
 
+  const hasVideo = Boolean(profile?.greeting_video_url);
+  const nextLabel = busy
+    ? t(language, "saving")
+    : step === 12
+      ? t(language, "submit")
+      : step === VIDEO_STEP && !hasVideo
+        ? t(language, "skip")
+        : t(language, "next");
   const nextBtn = (
-    <button type="button" className="btn btn--dark btn--block" disabled={busy} onClick={() => void validateAndAdvance()}>
-      {busy ? t(language, "saving") : step === 12 ? t(language, "submit") : t(language, "next")}
+    <button
+      type="button"
+      className="btn btn--dark btn--block"
+      disabled={busy || videoProgress !== null}
+      onClick={() => void validateAndAdvance()}
+    >
+      {nextLabel}
     </button>
   );
 
@@ -729,31 +778,63 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
         </>
       )}
 
-      {step === 9 && (
+      {step === VIDEO_STEP && (
         <>
-          <h2 className="wizard-title">{t(language, "qDream")}</h2>
-          <p className="wizard-hint">{t(language, "qDreamHint")}</p>
-          <div className="dream-grid">
-            {(
-              [
-                ["positano", "dreamPositano"],
-                ["rome", "dreamRome"],
-                ["milan", "dreamMilan"],
-                ["other", "dreamOther"],
-              ] as const
-            ).map(([key, labelKey]) => (
+          <h2 className="wizard-title">{t(language, "qVideo")}</h2>
+          <p className="wizard-hint">{t(language, "qVideoHint")}</p>
+          {profile?.greeting_video_url && videoProgress === null ? (
+            <video
+              key={profile.greeting_video_url}
+              className="greeting-video"
+              src={mediaUrl(profile.greeting_video_url)}
+              controls
+              playsInline
+              preload="metadata"
+            />
+          ) : null}
+          {videoProgress !== null ? (
+            <div className="greeting-video-progress" role="status">
+              <div className="greeting-video-progress__bar" style={{ width: `${videoProgress}%` }} />
+              <span>
+                {videoProgress < 100
+                  ? tf(language, "videoUploading", { percent: videoProgress })
+                  : t(language, "videoProcessing")}
+              </span>
+            </div>
+          ) : (
+            <div className="greeting-video-actions">
               <button
-                key={key}
                 type="button"
-                className={`dream-card${form.dream_location === key ? " is-active" : ""}`}
-                onClick={() => setForm((f) => ({ ...f, dream_location: key }))}
+                className="btn btn--cream btn--block"
+                disabled={busy}
+                onClick={() => videoInputRef.current?.click()}
               >
-                <img src={dreamLocationAssets[key]} alt="" />
-                <span className="dream-card__label">{t(language, labelKey)}</span>
-                {form.dream_location === key ? <span className="dream-card__check">✓</span> : null}
+                {t(language, hasVideo ? "videoReplace" : "videoAdd")}
               </button>
-            ))}
-          </div>
+              {hasVideo ? (
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--block greeting-video-remove"
+                  disabled={busy}
+                  onClick={() => void onVideoRemove()}
+                >
+                  {t(language, "videoRemove")}
+                </button>
+              ) : null}
+            </div>
+          )}
+          <p className="chars-meta">{t(language, "videoLimitHint")}</p>
+          <input
+            ref={videoInputRef}
+            type="file"
+            accept="video/*"
+            hidden
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              void onVideoPicked(file);
+            }}
+          />
         </>
       )}
 

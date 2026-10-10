@@ -71,8 +71,6 @@ def validate_for_submit(profile: Profile) -> list[str]:
     age_max = profile.age_max or 0
     if age_min < 18 or age_max > 99 or age_min > age_max:
         errors.append("partner_age")
-    if not profile.dream_location:
-        errors.append("dream_location")
     if profile.cover_question_id is None or not (1 <= profile.cover_question_id <= 9):
         errors.append("cover_question_id")
     answer = (profile.cover_answer or "").strip()

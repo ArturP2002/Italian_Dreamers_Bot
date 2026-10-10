@@ -1,4 +1,4 @@
-"""Cover splash questions (1 of 9) + dream location keys."""
+"""Cover splash questions (1 of 9)."""
 
 from __future__ import annotations
 
@@ -40,5 +40,3 @@ COVER_QUESTIONS: dict[int, dict[str, str]] = {
         "it": "La cosa più inaspettata che abbia mai fatto per amore",
     },
 }
-
-DREAM_LOCATIONS = ("positano", "rome", "milan", "other")

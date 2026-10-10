@@ -65,7 +65,6 @@ class MessageRequestOut(BaseModel):
     profile_photo_url: str | None
     profile_city: str | None
     profile_about: str | None
-    profile_dream: str | None
     counterpart_username: str | None
     counterpart_telegram_link: str | None
     unlocked_at: datetime | None
@@ -253,7 +252,6 @@ def _serialize_request(mr: MessageRequest, viewer: User) -> MessageRequestOut:
         profile_photo_url=profile_photo,
         profile_city=profile.city if profile else None,
         profile_about=profile.about if profile else None,
-        profile_dream=profile.dream_location if profile else None,
         counterpart_username=counterpart_username,
         counterpart_telegram_link=_tg_link(counterpart_username),
         unlocked_at=mr.unlocked_at,

@@ -1,0 +1,3 @@
+# Keep directory; uploaded greeting videos are ignored
+*
+!.gitignore

@@ -44,7 +44,7 @@ export type Profile = {
   personal_data_agreement: boolean;
   cover_question_id: number | null;
   cover_answer: string | null;
-  dream_location: string | null;
+  greeting_video_url?: string | null;
   moderation_feedback: string | null;
   scheduled_at?: string | null;
   paid_at?: string | null;
@@ -88,7 +88,7 @@ export type AdminProfileDetail = AdminProfileListItem & {
   age_max: number;
   cover_question_id: number | null;
   cover_answer: string | null;
-  dream_location: string | null;
+  greeting_video_url?: string | null;
   photos: ProfilePhoto[];
   message_credits: number;
   is_blocked: boolean;
@@ -230,7 +230,6 @@ export type MessageRequestItem = {
   profile_photo_url: string | null;
   profile_city: string | null;
   profile_about: string | null;
-  profile_dream: string | null;
   counterpart_username: string | null;
   counterpart_telegram_link: string | null;
   unlocked_at: string | null;
@@ -311,7 +310,6 @@ export type ProfileUpdatePayload = Partial<{
   personal_data_agreement: boolean;
   cover_question_id: number;
   cover_answer: string;
-  dream_location: string;
 }>;
 
 function initDataHeader(): HeadersInit {
@@ -399,6 +397,48 @@ export async function uploadProfilePhoto(file: File): Promise<Profile | null> {
 
 export async function deleteProfilePhoto(photoId: number): Promise<Profile | null> {
   return apiFetch<Profile>(`/api/me/profile/photos/${photoId}`, { method: "DELETE" });
+}
+
+export type GreetingVideoUploadResult =
+  | { ok: true; profile: Profile }
+  | { ok: false; reason: "too_large" | "failed" };
+
+export function uploadGreetingVideo(
+  file: File,
+  onProgress?: (percent: number) => void,
+): Promise<GreetingVideoUploadResult> {
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_BASE}/api/me/profile/video`);
+    xhr.setRequestHeader("Accept", "application/json");
+    for (const [key, value] of Object.entries(initDataHeader() as Record<string, string>)) {
+      xhr.setRequestHeader(key, value);
+    }
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && onProgress) {
+        onProgress(Math.round((event.loaded / event.total) * 100));
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve({ ok: true, profile: JSON.parse(xhr.responseText) as Profile });
+        } catch {
+          resolve({ ok: false, reason: "failed" });
+        }
+        return;
+      }
+      resolve({ ok: false, reason: xhr.status === 413 ? "too_large" : "failed" });
+    };
+    xhr.onerror = () => resolve({ ok: false, reason: "failed" });
+    const body = new FormData();
+    body.append("file", file);
+    xhr.send(body);
+  });
+}
+
+export async function deleteGreetingVideo(): Promise<Profile | null> {
+  return apiFetch<Profile>("/api/me/profile/video", { method: "DELETE" });
 }
 
 export async function fetchCoverQuestions(): Promise<CoverQuestion[]> {

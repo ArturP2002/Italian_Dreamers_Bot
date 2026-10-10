@@ -18,10 +18,12 @@ from app.services.splash import (
     build_splash_image,
     resolve_cover_texts,
 )
+from app.services.greeting_video import video_path
 from app.services.telegram_api import (
+    TelegramApiError,
     bot_has_main_web_app,
+    send_media_album,
     send_message,
-    send_photo_album,
     send_photo_file,
     send_photo_media,
 )
@@ -261,7 +263,9 @@ async def publish_profile_to_channel(
     splash_resp = await send_photo_file(settings, settings.channel_id, splash_path)
     splash_message_id = (splash_resp.get("result") or {}).get("message_id")
 
-    photos = sorted(profile.photos or [], key=lambda p: p.position)[:MAX_ALBUM_PHOTOS]
+    greeting_video = video_path(profile.greeting_video_file_id)
+    photo_limit = MAX_ALBUM_PHOTOS - (1 if greeting_video else 0)
+    photos = sorted(profile.photos or [], key=lambda p: p.position)[:photo_limit]
     caption = build_channel_caption(profile, language, fields)
     has_main_web_app = await bot_has_main_web_app(settings) if bot_username else False
     markup = _bot_startapp_url(
@@ -287,16 +291,29 @@ async def publish_profile_to_channel(
         channel_message_id = (msg.get("result") or {}).get("message_id")
     else:
         album_caption = escape(caption, quote=False) if caption_fits else None
-        sources = [_photo_source(p.file_id) for p in photos]
-        if len(sources) == 1:
-            source = sources[0]
+        photo_items: list[tuple[str, str | Path]] = [
+            ("photo", _photo_source(p.file_id)) for p in photos
+        ]
+        items = ([("video", greeting_video)] if greeting_video else []) + photo_items
+        if len(items) == 1:
+            source = items[0][1]
             if isinstance(source, Path):
                 resp = await send_photo_file(settings, settings.channel_id, source, caption=album_caption)
             else:
                 resp = await send_photo_media(settings, settings.channel_id, source, caption=album_caption)
             channel_message_id = (resp.get("result") or {}).get("message_id")
         else:
-            group = await send_photo_album(settings, settings.channel_id, sources, caption=album_caption)
+            try:
+                group = await send_media_album(
+                    settings, settings.channel_id, items, caption=album_caption
+                )
+            except TelegramApiError:
+                if not greeting_video:
+                    raise
+                logger.exception("Album with greeting video failed for profile %s; retrying without it", profile.id)
+                group = await send_media_album(
+                    settings, settings.channel_id, photo_items, caption=album_caption
+                )
             results = group.get("result") or []
             if results:
                 channel_message_id = results[0].get("message_id")

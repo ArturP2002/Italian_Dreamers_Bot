@@ -149,7 +149,6 @@ export const messages = {
     referralCopy: "Скопировать ссылку",
     referralCopied: "Ссылка скопирована",
     cardLetter: "Письмо",
-    cardDream: "Мечтает увидеть",
 
     introTitle: "Расскажите о себе",
     introAccent: "ваша история начинается здесь",
@@ -193,12 +192,17 @@ export const messages = {
     qDesiredHint: "Что важно в отношениях — 2–3 предложения",
     qAgeMin: "Возраст партнёра от",
     qAgeMax: "до",
-    qDream: "Что вы мечтаете увидеть?",
-    qDreamHint: "Это место появится на обложке вашей анкеты в канале.",
-    dreamPositano: "Позитано",
-    dreamRome: "Рим",
-    dreamMilan: "Милан",
-    dreamOther: "Другое место",
+    qVideo: "Видео-приветствие",
+    qVideoHint:
+      "По желанию. Запишите короткое видео: поздоровайтесь и расскажите немного о себе. Оно будет первым в вашей анкете в канале. Этот шаг можно пропустить.",
+    videoLimitHint: "До 50 МБ, лучше не длиннее минуты.",
+    videoAdd: "Записать или выбрать видео",
+    videoReplace: "Заменить видео",
+    videoRemove: "Удалить видео",
+    videoUploading: "Загружаем видео… {percent}%",
+    videoProcessing: "Обрабатываем видео…",
+    videoTooLarge: "Видео слишком большое: максимум 50 МБ. Попробуйте записать покороче.",
+    myProfileVideo: "Видео-приветствие",
     qCover: "Вопрос для заставки канала",
     qCoverPick: "Выберите один вопрос",
     qCoverAnswer: "Ваш ответ (до 70 символов)",
@@ -390,7 +394,6 @@ export const messages = {
     referralCopy: "Copia link",
     referralCopied: "Link copiato",
     cardLetter: "Lettera",
-    cardDream: "Sogna di vedere",
 
     introTitle: "Raccontaci di te",
     introAccent: "la tua storia inizia qui",
@@ -433,12 +436,17 @@ export const messages = {
     qDesiredHint: "Cosa conta in una relazione — 2–3 frasi",
     qAgeMin: "Età del partner da",
     qAgeMax: "a",
-    qDream: "Cosa sogni di vedere?",
-    qDreamHint: "Questo luogo apparirà sulla copertina del tuo profilo nel canale.",
-    dreamPositano: "Positano",
-    dreamRome: "Roma",
-    dreamMilan: "Milano",
-    dreamOther: "Altro luogo",
+    qVideo: "Video di saluto",
+    qVideoHint:
+      "Facoltativo. Registra un breve video: saluta e racconta qualcosa di te. Sarà il primo elemento del tuo profilo nel canale. Puoi saltare questo passaggio.",
+    videoLimitHint: "Fino a 50 MB, meglio non oltre un minuto.",
+    videoAdd: "Registra o scegli un video",
+    videoReplace: "Sostituisci video",
+    videoRemove: "Elimina video",
+    videoUploading: "Caricamento video… {percent}%",
+    videoProcessing: "Elaborazione video…",
+    videoTooLarge: "Il video è troppo grande: massimo 50 MB. Prova a registrarne uno più breve.",
+    myProfileVideo: "Video di saluto",
     qCover: "Domanda per la copertina del canale",
     qCoverPick: "Scegli una domanda",
     qCoverAnswer: "La tua risposta (max 70 caratteri)",
@@ -544,19 +552,6 @@ export function tf(
     text = text.replace(`{${k}}`, String(v));
   }
   return text;
-}
-
-const DREAM_LOCATION_KEYS: Record<string, MessageKey> = {
-  positano: "dreamPositano",
-  rome: "dreamRome",
-  milan: "dreamMilan",
-  other: "dreamOther",
-};
-
-export function dreamLocationLabel(language: Language, location: string | null | undefined): string {
-  if (!location) return "";
-  const key = DREAM_LOCATION_KEYS[location];
-  return key ? t(language, key) : location;
 }
 
 export function greetingKey(date = new Date()): MessageKey {
