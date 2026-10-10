@@ -502,9 +502,42 @@ export async function adminPublishNow(id: number): Promise<AdminProfileDetail> {
   return apiFetchJsonOrThrow(`/api/admin/profiles/${id}/publish-now`, { method: "POST" });
 }
 
-export async function adminFetchUsers(q: string): Promise<AdminUser[]> {
-  const query = q ? `?q=${encodeURIComponent(q)}` : "";
-  return (await apiFetch<AdminUser[]>(`/api/admin/users${query}`)) ?? [];
+export type AdminUserListPage = {
+  items: AdminUser[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+};
+
+export async function adminFetchUsers(
+  q: string,
+  opts?: { limit?: number; offset?: number },
+): Promise<AdminUserListPage> {
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  if (opts?.limit != null) params.set("limit", String(opts.limit));
+  if (opts?.offset != null) params.set("offset", String(opts.offset));
+  const query = params.toString() ? `?${params}` : "";
+  const data = await apiFetch<AdminUserListPage | AdminUser[]>(`/api/admin/users${query}`);
+  if (Array.isArray(data)) {
+    return {
+      items: data,
+      total: data.length,
+      limit: opts?.limit ?? data.length,
+      offset: opts?.offset ?? 0,
+      has_more: false,
+    };
+  }
+  return (
+    data ?? {
+      items: [],
+      total: 0,
+      limit: opts?.limit ?? 0,
+      offset: opts?.offset ?? 0,
+      has_more: false,
+    }
+  );
 }
 
 export async function adminBlockUser(id: number): Promise<AdminUser> {

@@ -85,6 +85,8 @@ const TABS: { id: Tab; label: string }[] = [
 
 /** Page size for admin profile lists (Новые / Очередь / Опубликованы). */
 const PROFILE_PAGE_SIZE = 10;
+/** Page size for admin users list. */
+const USER_PAGE_SIZE = 10;
 
 function profileBelongsToTab(status: string, tab: Tab): boolean {
   if (tab === "new") return status === "new";
@@ -246,6 +248,9 @@ export function AdminScreen({ language }: Props) {
   const [profilesTotal, setProfilesTotal] = useState(0);
   const [profilesLoadingMore, setProfilesLoadingMore] = useState(false);
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [usersHasMore, setUsersHasMore] = useState(false);
+  const [usersTotal, setUsersTotal] = useState(0);
+  const [usersLoadingMore, setUsersLoadingMore] = useState(false);
   const [payments, setPayments] = useState<AdminPayment[]>([]);
   const [ads, setAds] = useState<AdminAd[]>([]);
   const [complaints, setComplaints] = useState<AdminComplaint[]>([]);
@@ -332,7 +337,10 @@ export function AdminScreen({ language }: Props) {
       } else if (tab === "complaints") {
         setComplaints(await adminFetchComplaints("open"));
       } else if (tab === "users") {
-        setUsers(await adminFetchUsers(query));
+        const page = await adminFetchUsers(query, { limit: USER_PAGE_SIZE, offset: 0 });
+        setUsers(page.items);
+        setUsersTotal(page.total);
+        setUsersHasMore(page.has_more);
       } else if (tab === "payments") {
         setPayments(await adminFetchPayments());
       } else if (tab === "stats") {
@@ -364,6 +372,28 @@ export function AdminScreen({ language }: Props) {
       setError(e instanceof Error ? e.message : "Load failed");
     } finally {
       setProfilesLoadingMore(false);
+    }
+  };
+
+  const loadMoreUsers = async () => {
+    if (usersLoadingMore || !usersHasMore || tab !== "users") return;
+    setUsersLoadingMore(true);
+    setError(null);
+    try {
+      const page = await adminFetchUsers(query, {
+        limit: USER_PAGE_SIZE,
+        offset: users.length,
+      });
+      setUsers((prev) => {
+        const seen = new Set(prev.map((u) => u.id));
+        return [...prev, ...page.items.filter((u) => !seen.has(u.id))];
+      });
+      setUsersTotal(page.total);
+      setUsersHasMore(page.has_more);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Load failed");
+    } finally {
+      setUsersLoadingMore(false);
     }
   };
 
@@ -1000,36 +1030,58 @@ export function AdminScreen({ language }: Props) {
       ) : null}
 
       {selectedId == null && tab === "users" ? (
-        <ul className="admin-list">
-          {users.map((u) => (
-            <li key={u.id}>
-              <button
-                type="button"
-                className="admin-list-item"
-                onClick={() => (u.profile_id ? setSelectedId(u.profile_id) : undefined)}
-              >
-                {u.photo_url ? (
-                  <img src={mediaUrl(u.photo_url)} alt="" />
-                ) : (
-                  <div className="admin-list-item__ph" />
-                )}
-                <div>
-                  <strong>
-                    {u.first_name || "—"} · {u.telegram_id}
-                  </strong>
-                  <span>
-                    @{u.username || "—"} · ★{u.message_credits}
-                    {u.is_blocked ? " · заблокирован" : ""}
-                  </span>
-                  <span>
-                    {u.profile_name || "без анкеты"}
-                    {u.profile_status ? ` · ${statusRu(u.profile_status)}` : ""}
-                  </span>
-                </div>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="admin-list">
+            {users.length === 0 ? <li className="admin-empty">Пусто</li> : null}
+            {users.map((u) => (
+              <li key={u.id}>
+                <button
+                  type="button"
+                  className="admin-list-item"
+                  onClick={() => (u.profile_id ? setSelectedId(u.profile_id) : undefined)}
+                >
+                  {u.photo_url ? (
+                    <img src={mediaUrl(u.photo_url)} alt="" loading="lazy" decoding="async" />
+                  ) : (
+                    <div className="admin-list-item__ph" />
+                  )}
+                  <div>
+                    <strong>
+                      {u.first_name || "—"} · {u.telegram_id}
+                    </strong>
+                    <span>
+                      @{u.username || "—"} · ★{u.message_credits}
+                      {u.is_blocked ? " · заблокирован" : ""}
+                    </span>
+                    <span>
+                      {u.profile_name || "без анкеты"}
+                      {u.profile_status ? ` · ${statusRu(u.profile_status)}` : ""}
+                    </span>
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+          {users.length > 0 ? (
+            <div className="admin-list-footer">
+              <p className="admin-list-footer__count">
+                Показано {users.length} из {usersTotal}
+              </p>
+              {usersHasMore ? (
+                <button
+                  type="button"
+                  className="admin-btn admin-btn--primary admin-btn--block"
+                  disabled={usersLoadingMore || busy}
+                  onClick={() => void loadMoreUsers()}
+                >
+                  {usersLoadingMore ? "Загрузка…" : "Показать ещё"}
+                </button>
+              ) : (
+                <p className="admin-list-footer__done">Это все пользователи</p>
+              )}
+            </div>
+          ) : null}
+        </>
       ) : null}
 
       {tab === "payments" ? (

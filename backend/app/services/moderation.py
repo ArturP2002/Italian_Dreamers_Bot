@@ -187,22 +187,10 @@ async def schedule_profile(
     return await get_profile_admin(session, profile.id)  # type: ignore[return-value]
 
 
-async def search_users(
-    session: AsyncSession,
-    *,
-    query: str,
-    limit: int = 40,
-) -> list[User]:
+def _user_search_filters(query: str):
     q = query.strip()
     if not q:
-        result = await session.execute(
-            select(User)
-            .options(selectinload(User.profile))
-            .order_by(User.id.desc())
-            .limit(limit)
-        )
-        return list(result.scalars().all())
-
+        return None
     filters = [
         User.telegram_username.ilike(f"%{q.lstrip('@')}%"),
         User.telegram_first_name.ilike(f"%{q}%"),
@@ -211,14 +199,36 @@ async def search_users(
     if q.isdigit():
         filters.append(User.telegram_id == int(q))
         filters.append(User.id == int(q))
+    return or_(*filters)
 
-    result = await session.execute(
+
+async def count_users(session: AsyncSession, *, query: str = "") -> int:
+    stmt = select(func.count()).select_from(User)
+    filt = _user_search_filters(query)
+    if filt is not None:
+        stmt = stmt.where(filt)
+    result = await session.execute(stmt)
+    return int(result.scalar_one())
+
+
+async def search_users(
+    session: AsyncSession,
+    *,
+    query: str,
+    limit: int = 40,
+    offset: int = 0,
+) -> list[User]:
+    stmt = (
         select(User)
         .options(selectinload(User.profile))
-        .where(or_(*filters))
         .order_by(User.id.desc())
         .limit(limit)
+        .offset(offset)
     )
+    filt = _user_search_filters(query)
+    if filt is not None:
+        stmt = stmt.where(filt)
+    result = await session.execute(stmt)
     return list(result.scalars().all())
 
 

@@ -5,6 +5,12 @@ import App from "./App";
 import "./styles/tokens.css";
 import "./styles/screens.css";
 
+try {
+  sessionStorage.removeItem("id_asset_reload");
+} catch {
+  /* storage unavailable */
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>

@@ -29,6 +29,7 @@ from app.services.moderation import (
     admin_stats,
     approve_profile,
     count_profiles,
+    count_users,
     first_photo_file_ids,
     get_profile_admin,
     grant_credits,
@@ -377,13 +378,24 @@ async def admin_publish_now(
     return _detail(profile)
 
 
-@router.get("/users", response_model=list[UserOut])
+class UserListPage(BaseModel):
+    items: list[UserOut]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
+
+
+@router.get("/users", response_model=UserListPage)
 async def admin_users(
     q: str = Query(default=""),
+    limit: int = Query(default=25, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
     _auth: AuthContext = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
-) -> list[UserOut]:
-    users = await search_users(session, query=q)
+) -> UserListPage:
+    total = await count_users(session, query=q)
+    users = await search_users(session, query=q, limit=limit, offset=offset)
     profile_ids = [u.profile.id for u in users if u.profile is not None]
     thumb_ids = await first_photo_file_ids(session, profile_ids)
     out: list[UserOut] = []
@@ -406,7 +418,13 @@ async def admin_users(
                 photo_url=_photo_url(file_id) if file_id else None,
             )
         )
-    return out
+    return UserListPage(
+        items=out,
+        total=total,
+        limit=limit,
+        offset=offset,
+        has_more=(offset + len(out)) < total,
+    )
 
 
 @router.get("/users/{user_id}", response_model=UserOut)

@@ -10,6 +10,30 @@
     <!-- Served locally: telegram.org is unreliable from some networks and a hanging
          blocking script leaves the Mini App on a blank screen. -->
     <script src="/telegram-web-app.js"></script>
+    <!-- Telegram WebView may keep a stale index.html that points at bundles removed by
+         the last deploy; reload once so the fresh index.html is fetched. -->
+    <script>
+      (function () {
+        var KEY = "id_asset_reload";
+        window.addEventListener(
+          "error",
+          function (event) {
+            var el = event.target;
+            if (!el || (el.tagName !== "SCRIPT" && el.tagName !== "LINK")) return;
+            var url = el.src || el.href || "";
+            if (url.indexOf("/assets/") === -1) return;
+            try {
+              if (sessionStorage.getItem(KEY)) return;
+              sessionStorage.setItem(KEY, "1");
+            } catch (e) {
+              return;
+            }
+            window.location.reload();
+          },
+          true,
+        );
+      })();
+    </script>
     <style>
       html,
       body {
