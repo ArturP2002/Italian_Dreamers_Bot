@@ -117,14 +117,18 @@ def build_splash_image(
     a_text = answer.strip().upper()
     a_lines = _wrap(draw, a_text, a_font, max_w)
 
-    # Vertical layout: question upper-mid, answer below, pronoun near answer
+    # Vertical layout: pronoun on top, question below it, answer last
     q_block_h = len(q_lines) * 54
     a_block_h = len(a_lines) * 56
-    total_h = q_block_h + 48 + a_block_h + 40
+    total_h = 48 + q_block_h + 36 + a_block_h
     y = (HEIGHT - total_h) // 2 - 40
 
     white = (245, 240, 232, 255)
     cream = (239, 228, 210, 255)
+
+    pronoun_w = draw.textlength(pronoun, font=p_font)
+    draw.text(((WIDTH - pronoun_w) / 2, y), pronoun, font=p_font, fill=(200, 167, 116, 255))
+    y += 48
 
     for line in q_lines:
         tw = draw.textlength(line, font=q_font)
@@ -132,9 +136,6 @@ def build_splash_image(
         y += 54
 
     y += 36
-    pronoun_w = draw.textlength(pronoun, font=p_font)
-    draw.text(((WIDTH - pronoun_w) / 2, y), pronoun, font=p_font, fill=(200, 167, 116, 255))
-    y += 40
 
     for line in a_lines:
         tw = draw.textlength(line, font=a_font)
