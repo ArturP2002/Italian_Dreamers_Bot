@@ -35,7 +35,7 @@ MEDIA_PROFILES = Path(__file__).resolve().parents[2] / "media" / "profiles"
 
 CAPTION_LIMIT = 1024
 TEXT_LIMIT = 4096
-MAX_ALBUM_PHOTOS = 10
+CHANNEL_PHOTOS = 3
 
 CAPTION_I18N = {
     "ru": {
@@ -264,8 +264,7 @@ async def publish_profile_to_channel(
     splash_message_id = (splash_resp.get("result") or {}).get("message_id")
 
     greeting_video = video_path(profile.greeting_video_file_id)
-    photo_limit = MAX_ALBUM_PHOTOS - (1 if greeting_video else 0)
-    photos = sorted(profile.photos or [], key=lambda p: p.position)[:photo_limit]
+    photos = sorted(profile.photos or [], key=lambda p: p.position)[:CHANNEL_PHOTOS]
     caption = build_channel_caption(profile, language, fields)
     has_main_web_app = await bot_has_main_web_app(settings) if bot_username else False
     markup = _bot_startapp_url(

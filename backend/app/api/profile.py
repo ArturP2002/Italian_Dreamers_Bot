@@ -47,8 +47,7 @@ MEDIA_ROOT = Path(__file__).resolve().parents[2] / "media" / "profiles"
 MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
-MAX_PHOTOS = 5
-MIN_PHOTOS = 3
+REQUIRED_PHOTOS = 3
 
 
 class PhotoOut(BaseModel):
@@ -255,8 +254,8 @@ async def upload_photo(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
-    if len(profile.photos) >= MAX_PHOTOS:
-        raise HTTPException(status_code=400, detail=f"Maximum {MAX_PHOTOS} photos")
+    if len(profile.photos) >= REQUIRED_PHOTOS:
+        raise HTTPException(status_code=400, detail=f"Maximum {REQUIRED_PHOTOS} photos")
 
     content_type = (file.content_type or "").lower()
     if content_type not in ALLOWED_IMAGE_TYPES:
@@ -406,7 +405,7 @@ async def submit_profile(
     if errors:
         raise HTTPException(
             status_code=400,
-            detail={"message": "Profile incomplete", "fields": errors, "min_photos": MIN_PHOTOS},
+            detail={"message": "Profile incomplete", "fields": errors, "required_photos": REQUIRED_PHOTOS},
         )
 
     profile.status = ProfileStatus.NEW.value

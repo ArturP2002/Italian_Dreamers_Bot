@@ -80,8 +80,7 @@ def validate_for_submit(profile: Profile) -> list[str]:
         errors.append("personal_data_agreement")
     if not (profile.telegram_username or "").strip():
         errors.append("telegram_username")
-    photo_count = len(profile.photos or [])
-    if photo_count < 3 or photo_count > 5:
+    if len(profile.photos or []) != 3:
         errors.append("photos")
     if not profile.gender:
         errors.append("gender")

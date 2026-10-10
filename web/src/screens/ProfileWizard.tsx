@@ -21,6 +21,7 @@ import { ProfileIntroScreen } from "./ProfileIntroScreen";
 const TOTAL_STEPS = 12;
 const VIDEO_STEP = 9;
 const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
+const REQUIRED_PHOTOS = 3;
 
 type Phase = "loading" | "intro" | "gate" | "guide" | "steps" | "done";
 
@@ -41,7 +42,7 @@ function resumeStepFromProfile(p: Profile): number {
   if (!p.about.trim()) return 6;
   if (!p.desired_partner.trim()) return 8;
   if (!p.cover_question_id || !p.cover_answer?.trim()) return p.greeting_video_url ? 10 : VIDEO_STEP;
-  if ((p.photos?.length ?? 0) < 3) return 11;
+  if ((p.photos?.length ?? 0) !== REQUIRED_PHOTOS) return 11;
   return 12;
 }
 
@@ -68,14 +69,12 @@ function WizardChrome({
   onBack,
   children,
   footer,
-  showProgress = true,
 }: {
   language: Language;
   step: number;
   onBack: () => void;
   children: ReactNode;
   footer: ReactNode;
-  showProgress?: boolean;
 }) {
   const pct = Math.round((step / TOTAL_STEPS) * 100);
   return (
@@ -84,18 +83,12 @@ function WizardChrome({
         <button type="button" className="wizard__back" onClick={onBack} aria-label={t(language, "back")}>
           ‹
         </button>
-        {showProgress ? (
-          <>
-            <div className="wizard__progress" aria-hidden>
-              <div className="wizard__progress-bar" style={{ width: `${pct}%` }} />
-            </div>
-            <span className="wizard__step-num">
-              {tf(language, "stepOf", { current: step, total: TOTAL_STEPS })}
-            </span>
-          </>
-        ) : (
-          <div className="wizard__progress" aria-hidden />
-        )}
+        <div className="wizard__progress" aria-hidden>
+          <div className="wizard__progress-bar" style={{ width: `${pct}%` }} />
+        </div>
+        <span className="wizard__step-num">
+          {tf(language, "stepOf", { current: step, total: TOTAL_STEPS })}
+        </span>
       </div>
       <div className="wizard__body">{children}</div>
       <div className="wizard__footer">{footer}</div>
@@ -283,8 +276,9 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
         break;
       }
       case 11: {
-        const count = profile?.photos.length ?? 0;
-        if (count < 3) return setError(t(language, "qPhotosHint"));
+        if ((profile?.photos.length ?? 0) !== REQUIRED_PHOTOS) {
+          return setError(t(language, "qPhotosHint"));
+        }
         break;
       }
       case 12: {
@@ -322,8 +316,8 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
     setBusy(true);
     setError(null);
     let latest = profile;
-    for (const file of files.slice(0, 5)) {
-      if ((latest?.photos.length ?? 0) >= 5) break;
+    for (const file of files.slice(0, REQUIRED_PHOTOS)) {
+      if ((latest?.photos.length ?? 0) >= REQUIRED_PHOTOS) break;
       const updated = await uploadProfilePhoto(file);
       if (!updated) {
         setError(t(language, "errorGeneric"));
@@ -364,6 +358,8 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
     else setError(t(language, "errorGeneric"));
   };
 
+  const upcomingStep = profile ? resumeStepFromProfile(profile) : 1;
+
   if (phase === "loading") {
     return <section className="wizard screen" aria-busy="true" />;
   }
@@ -381,8 +377,7 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
     return (
       <WizardChrome
         language={language}
-        step={1}
-        showProgress={false}
+        step={upcomingStep}
         onBack={() => setPhase("intro")}
         footer={
           <button
@@ -446,8 +441,7 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
     return (
       <WizardChrome
         language={language}
-        step={1}
-        showProgress={false}
+        step={upcomingStep}
         onBack={() => setPhase("gate")}
         footer={
           <>
@@ -462,7 +456,7 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
               className="btn btn--dark btn--block"
               onClick={() => {
                 setError(null);
-                setStep(profile ? resumeStepFromProfile(profile) : 1);
+                setStep(upcomingStep);
                 setPhase("steps");
               }}
             >
@@ -896,7 +890,7 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
                 </button>
               </div>
             ))}
-            {(profile?.photos.length ?? 0) < 5 ? (
+            {(profile?.photos.length ?? 0) < REQUIRED_PHOTOS ? (
               <button type="button" className="photo-add" onClick={() => fileRef.current?.click()}>
                 {t(language, "addPhoto")}
               </button>
