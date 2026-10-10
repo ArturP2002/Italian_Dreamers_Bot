@@ -783,6 +783,8 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
               onChange={(e) => setForm((f) => ({ ...f, desired_partner: e.target.value }))}
             />
           </div>
+          <p className="wizard-subq">{t(language, "qAgeRange")}</p>
+          <p className="wizard-subq-hint">{t(language, "qAgeRangeHint")}</p>
           <div className="field-row">
             <div className="field">
               <label>{t(language, "qAgeMin")}</label>

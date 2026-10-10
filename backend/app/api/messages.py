@@ -98,6 +98,8 @@ class WriteTargetOut(BaseModel):
     city: str
     photo_url: str | None
     gender: str | None
+    age_min: int
+    age_max: int
     sender: SenderIdentityOut | None = None
 
 
@@ -303,6 +305,8 @@ async def write_target(
         city=profile.city,
         photo_url=photo,
         gender=profile.gender,
+        age_min=profile.age_min or 18,
+        age_max=profile.age_max or 99,
         sender=SenderIdentityOut(
             source=identity.source,
             name=identity.name,

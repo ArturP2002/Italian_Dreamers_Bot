@@ -120,6 +120,10 @@ export const messages = {
     writeSend: "Отправить",
     writeSent: "Письмо отправлено",
     writeAgeWarn: "Укажите реальный возраст от 18 лет.",
+    writeAgeRangeWarn:
+      "Этот человек предпочитает получать сообщения от людей в возрасте от {min} до {max} лет. Если всё же хотите написать — можете сделать это",
+    writeAnyway: "Написать всё равно",
+    writeCancel: "Отмена",
     writeFrom: "От кого",
     writeFromProfile: "Письмо отправится от вашей анкеты.",
     writeFromSaved: "Имя и возраст — из вашего первого письма.",
@@ -190,8 +194,11 @@ export const messages = {
     qHobbies: "Увлечения (кратко)",
     qDesired: "Кого вы хотите встретить?",
     qDesiredHint: "Что важно в отношениях — 2–3 предложения",
-    qAgeMin: "Возраст партнёра от",
-    qAgeMax: "до",
+    qAgeRange: "Какого возраста ты хочешь, чтобы тебе писали люди?",
+    qAgeRangeHint:
+      "(Эта информация не публикуется в общей анкете и не блокирует сообщения — она лишь высылает предупреждение тем, кто не подходит по возрасту, но у них всё равно остаётся возможность написать)",
+    qAgeMin: "От",
+    qAgeMax: "До",
     qVideo: "Видео-приветствие",
     qVideoHint:
       "По желанию. Запишите короткое видео: поздоровайтесь и расскажите немного о себе. Оно будет первым в вашей анкете в канале. Этот шаг можно пропустить.",
@@ -365,6 +372,10 @@ export const messages = {
     writeSend: "Invia",
     writeSent: "Lettera inviata",
     writeAgeWarn: "Indica un’età reale dai 18 anni.",
+    writeAgeRangeWarn:
+      "Questa persona preferisce ricevere messaggi da persone tra i {min} e {max} anni. Se vuoi comunque scrivere, puoi farlo",
+    writeAnyway: "Scrivi comunque",
+    writeCancel: "Annulla",
     writeFrom: "Mittente",
     writeFromProfile: "La lettera sarà inviata dal tuo profilo.",
     writeFromSaved: "Nome ed età dalla tua prima lettera.",
@@ -434,8 +445,11 @@ export const messages = {
     qHobbies: "Hobby (breve)",
     qDesired: "Chi vorresti incontrare?",
     qDesiredHint: "Cosa conta in una relazione — 2–3 frasi",
-    qAgeMin: "Età del partner da",
-    qAgeMax: "a",
+    qAgeRange: "Di che età vuoi che siano le persone che ti scrivono?",
+    qAgeRangeHint:
+      "(Questa informazione non viene pubblicata nel profilo generale e non blocca i messaggi — invia solo un avviso a chi non rientra nella fascia d’età, ma resta comunque possibile scrivere)",
+    qAgeMin: "Da",
+    qAgeMax: "A",
     qVideo: "Video di saluto",
     qVideoHint:
       "Facoltativo. Registra un breve video: saluta e racconta qualcosa di te. Sarà il primo elemento del tuo profilo nel canale. Puoi saltare questo passaggio.",

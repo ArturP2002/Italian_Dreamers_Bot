@@ -50,6 +50,29 @@ export function WriteLetterScreen({ language }: Props) {
   const sender = target?.sender ?? null;
   const senderPhoto = photoPreview ?? (sender?.photo_url ? mediaUrl(sender.photo_url) : null);
 
+  const confirmAgeMismatch = (message: string) =>
+    new Promise<boolean>((resolve) => {
+      const tg = window.Telegram?.WebApp;
+      try {
+        if (tg?.showPopup) {
+          tg.showPopup(
+            {
+              message,
+              buttons: [
+                { id: "write", type: "default", text: t(language, "writeAnyway") },
+                { id: "cancel", type: "default", text: t(language, "writeCancel") },
+              ],
+            },
+            (id) => resolve(id === "write"),
+          );
+          return;
+        }
+      } catch {
+        /* popups unsupported in this client version */
+      }
+      resolve(window.confirm(message));
+    });
+
   const onSubmit = async () => {
     setError(null);
     const ageNum = Number(age);
@@ -66,6 +89,13 @@ export function WriteLetterScreen({ language }: Props) {
     if (text.trim().length < 10) {
       setError(t(language, "fieldRequired"));
       return;
+    }
+    if (target) {
+      const senderAge = sender ? sender.age : ageNum;
+      if (senderAge < target.age_min || senderAge > target.age_max) {
+        const message = tf(language, "writeAgeRangeWarn", { min: target.age_min, max: target.age_max });
+        if (!(await confirmAgeMismatch(message))) return;
+      }
     }
     setBusy(true);
     try {

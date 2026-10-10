@@ -255,6 +255,8 @@ export type WriteTarget = {
   city: string;
   photo_url: string | null;
   gender: string | null;
+  age_min: number;
+  age_max: number;
   sender: {
     source: "profile" | "saved";
     name: string;
