@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { profileIntroAssets, backgroundAssets } from "../assets/backgrounds";
+import { profileIntroAssets, profileIntroPhotos } from "../assets/backgrounds";
 import { type Language, tf, t } from "../i18n/messages";
 import { fetchConfig } from "../lib/api";
 
@@ -12,10 +12,6 @@ type Props = {
 export function ProfileIntroScreen({ language, onStart }: Props) {
   const navigate = useNavigate();
   const [stars, setStars] = useState(3000);
-  const topSrc = language === "ru" ? backgroundAssets.bg_spb_winter : backgroundAssets.bg_rome_night;
-  const bottomSrc =
-    language === "ru" ? backgroundAssets.bg_couple_silhouette : backgroundAssets.bg_positano_run;
-
   useEffect(() => {
     void fetchConfig().then((cfg) => {
       if (cfg?.prices.profile_publish_stars) setStars(cfg.prices.profile_publish_stars);
@@ -29,7 +25,7 @@ export function ProfileIntroScreen({ language, onStart }: Props) {
       </button>
       <div className="profile-intro__stack">
         <div className="profile-intro__top">
-          <img src={topSrc} alt="" />
+          <img src={profileIntroPhotos.top} alt="" />
         </div>
         <div className="profile-intro__band">
           <h1 className="profile-intro__title">{t(language, "introTitle")}</h1>
@@ -41,7 +37,7 @@ export function ProfileIntroScreen({ language, onStart }: Props) {
           </p>
         </div>
         <div className="profile-intro__bottom">
-          <img src={bottomSrc} alt="" />
+          <img src={profileIntroPhotos.bottom} alt="" />
         </div>
       </div>
       {/* Decorative reference composite kept in public for moodboard parity */}

@@ -2,12 +2,8 @@
  * Background photo pool from TechnicalSpecification/MiniApp_Reference/Background_Photo/.
  */
 export const backgroundAssets = {
-  bg_spb_winter: "/backgrounds/bg_spb_winter.jpg",
-  bg_rome_night: "/backgrounds/bg_rome_night.jpg",
   bg_positano_run: "/backgrounds/bg_positano_run.jpg",
-  bg_couple_silhouette: "/backgrounds/bg_couple_silhouette.jpg",
-  bg_italy_coast: "/backgrounds/bg_italy_coast.jpg",
-  bg_spb_bridge: "/backgrounds/bg_spb_bridge.jpg",
+  bg_spb_kazan_couple: "/backgrounds/bg_spb_kazan_couple.jpg",
 } as const;
 
 export type BackgroundKey = keyof typeof backgroundAssets;
@@ -29,9 +25,15 @@ export const profileIntroAssets = {
   it: "/photos/profile_intro_it.jpg",
 } as const;
 
+export const profileIntroPhotos = {
+  top: "/photos/intro_top_spb_rooftop.jpg",
+  bottom: "/photos/intro_bottom_rome_sunset_couple.jpg",
+} as const;
+
 export const homeAssets = {
-  letters: "/photos/home_letters.jpg",
-  create: "/photos/home_create.jpg",
+  matches: "/photos/home_matches_rome_night_couple.jpg",
+  profile: "/photos/home_profile_spb_winter_couple.jpg",
+  credits: "/photos/home_credits_snow_girl.jpg",
 } as const;
 
 /** Guide media by app language. Filenames keep historical gender labels. */
