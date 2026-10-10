@@ -119,12 +119,12 @@ async def notify_user_scheduled(
     if lang == "it":
         text = (
             f"📅 Data di pubblicazione fissata per <b>{profile.name}</b>:\n"
-            f"<b>{date_str}</b> (ora di Mosca)."
+            f"<b>{date_str}</b> (ora di Roma)."
         )
     else:
         text = (
             f"📅 Дата публикации анкеты <b>{profile.name}</b>:\n"
-            f"<b>{date_str}</b> (МСК)."
+            f"<b>{date_str}</b> (по Риму)."
         )
     try:
         await send_message(settings, user.telegram_id, text)

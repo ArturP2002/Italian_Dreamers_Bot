@@ -1,4 +1,4 @@
-"""Ad requests: submit, moderate, pay, FIFO 10:00 MSK slot, 48h TTL, reminders."""
+"""Ad requests: submit, moderate, pay, FIFO 10:00 Rome-time slot, 48h TTL, reminders."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ from app.services.telegram_api import delete_message, send_message, send_photo_m
 logger = logging.getLogger(__name__)
 
 AD_TTL_HOURS = 48
-AD_SLOT_HOUR = 10  # Europe/Moscow
+AD_SLOT_HOUR = 10  # APP_TIMEZONE (Europe/Rome)
 AD_CATEGORIES = frozenset({"restaurants", "mens_goods", "language_courses", "other"})
 
 
@@ -225,7 +225,7 @@ def next_10am_after(dt: datetime, tz: ZoneInfo) -> datetime:
 
 
 async def compute_next_ad_slot(session: AsyncSession, settings: Settings) -> datetime:
-    """FIFO: next free 10:00 MSK after the last active/queued slot chain."""
+    """FIFO: next free 10:00 (Rome time) after the last active/queued slot chain."""
     tz = app_tz(settings)
     now = datetime.now(timezone.utc)
 
@@ -362,7 +362,7 @@ async def expire_due_ads(session: AsyncSession, settings: Settings) -> int:
 
 
 async def activate_due_ads(session: AsyncSession, settings: Settings) -> int:
-    """Activate next queued ad when slot is free and scheduled_at is due (10:00 MSK FIFO)."""
+    """Activate next queued ad when slot is free and scheduled_at is due (10:00 Rome time FIFO)."""
     now = datetime.now(timezone.utc)
     active_count = int(
         (

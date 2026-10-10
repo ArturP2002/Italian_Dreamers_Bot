@@ -29,7 +29,7 @@ class Settings(BaseSettings):
 
     log_level: str = Field(alias="LOG_LEVEL", default="INFO")
     environment: str = Field(alias="ENVIRONMENT", default="development")
-    app_timezone: str = Field(alias="APP_TIMEZONE", default="Europe/Moscow")
+    app_timezone: str = Field(alias="APP_TIMEZONE", default="Europe/Rome")
 
     # Prices (Stars) — placeholders from ТЗ
     price_message_credit_stars: int = Field(alias="PRICE_MESSAGE_CREDIT_STARS", default=258)

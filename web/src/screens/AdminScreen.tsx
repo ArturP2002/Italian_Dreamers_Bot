@@ -32,6 +32,7 @@ import {
   type AdminStats,
   type AdminUser,
 } from "../lib/api";
+import { APP_TIME_ZONE, toAppZoneInputValue } from "../lib/time";
 
 type Props = { language: Language };
 
@@ -238,7 +239,7 @@ function formatDt(value: string | null | undefined): string {
   if (!value) return "—";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString("ru-RU", { timeZone: "Europe/Moscow" });
+  return d.toLocaleString("ru-RU", { timeZone: APP_TIME_ZONE });
 }
 
 export function AdminScreen({ language }: Props) {
@@ -271,11 +272,7 @@ export function AdminScreen({ language }: Props) {
 
   const syncScheduleLocal = (d: AdminProfileDetail | null) => {
     if (d?.scheduled_at) {
-      const local = new Date(d.scheduled_at);
-      const pad = (n: number) => String(n).padStart(2, "0");
-      setScheduleLocal(
-        `${local.getFullYear()}-${pad(local.getMonth() + 1)}-${pad(local.getDate())}T${pad(local.getHours())}:${pad(local.getMinutes())}`,
-      );
+      setScheduleLocal(toAppZoneInputValue(d.scheduled_at));
     } else {
       setScheduleLocal("");
     }
@@ -694,7 +691,7 @@ export function AdminScreen({ language }: Props) {
 
           {detail.status === "queued" ? (
             <div className="admin-actions">
-              <label className="admin-label">Дата публикации (МСК)</label>
+              <label className="admin-label">Дата публикации (по Риму)</label>
               <input
                 type="datetime-local"
                 className="admin-input admin-input--date"
@@ -706,13 +703,16 @@ export function AdminScreen({ language }: Props) {
                 className="admin-btn admin-btn--primary"
                 disabled={busy || !scheduleLocal}
                 onClick={() => {
-                  const iso = `${scheduleLocal}:00+03:00`;
-                  void run(() => adminScheduleProfile(detail.id, iso), "Дата назначена (МСК)", {
+                  // No offset: the backend applies APP_TIMEZONE (Rome, DST-aware).
+                  const wallClock = `${scheduleLocal}:00`;
+                  const [datePart, timePart] = scheduleLocal.split("T");
+                  const [y, m, dd] = datePart.split("-");
+                  void run(() => adminScheduleProfile(detail.id, wallClock), "Дата назначена (по Риму)", {
                     tone: "ok",
                     title: "Дата назначена",
                     subject: `${detail.name}, ${detail.age}`,
                     lines: [
-                      `Анкета выйдет в канале ${formatDt(iso)} МСК.`,
+                      `Анкета выйдет в канале ${dd}.${m}.${y}, ${timePart} по Риму.`,
                       "Пользователю отправлено уведомление с датой.",
                     ],
                     reopenLabel: "Открыть анкету",
@@ -741,7 +741,7 @@ export function AdminScreen({ language }: Props) {
                 Опубликовать сейчас
               </button>
               {detail.scheduled_at ? (
-                <p className="admin-meta">Запланировано: {formatDt(detail.scheduled_at)} МСК</p>
+                <p className="admin-meta">Запланировано: {formatDt(detail.scheduled_at)} по Риму</p>
               ) : null}
             </div>
           ) : null}
@@ -806,10 +806,10 @@ export function AdminScreen({ language }: Props) {
           <p className="admin-meta">Контакт: {adDetail.contact || "—"}</p>
           <p className="admin-meta">Желаемая дата: {adDetail.desired_date || "—"}</p>
           {adDetail.scheduled_at ? (
-            <p className="admin-meta">Слот: {formatDt(adDetail.scheduled_at)} МСК</p>
+            <p className="admin-meta">Слот: {formatDt(adDetail.scheduled_at)} по Риму</p>
           ) : null}
           {adDetail.expires_at ? (
-            <p className="admin-meta">Истекает: {formatDt(adDetail.expires_at)} МСК</p>
+            <p className="admin-meta">Истекает: {formatDt(adDetail.expires_at)} по Риму</p>
           ) : null}
           {adDetail.status === "rejected" && adDetail.moderation_feedback ? (
             <p className="admin-meta">Причина отклонения: {adDetail.moderation_feedback}</p>
@@ -828,7 +828,7 @@ export function AdminScreen({ language }: Props) {
                     subject: adDetail.title,
                     lines: [
                       "Рекламодателю отправлен счёт на оплату слота.",
-                      "После оплаты заявка встанет в очередь на ближайший свободный слот 10:00 МСК.",
+                      "После оплаты заявка встанет в очередь на ближайший свободный слот 10:00 по Риму.",
                     ],
                     reopenLabel: "Открыть заявку",
                   })
@@ -876,7 +876,7 @@ export function AdminScreen({ language }: Props) {
                     title: "Оплата рекламы отмечена",
                     subject: adDetail.title,
                     lines: [
-                      "Заявка встала в очередь на ближайший свободный слот 10:00 МСК.",
+                      "Заявка встала в очередь на ближайший свободный слот 10:00 по Риму.",
                       "Пост выйдет автоматически, либо нажмите «Активировать сейчас» в карточке.",
                     ],
                     reopenLabel: "Открыть заявку",

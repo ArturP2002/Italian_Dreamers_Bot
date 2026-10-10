@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { type Language, t, tf } from "../i18n/messages";
 import type { MeUser } from "../lib/api";
+import { APP_TIME_ZONE } from "../lib/time";
 
 type Props = {
   language: Language;
@@ -10,7 +11,7 @@ type Props = {
 export function SupportScreen({ language, me }: Props) {
   const until = me?.soft_ban_until
     ? new Date(me.soft_ban_until).toLocaleString(language === "it" ? "it-IT" : "ru-RU", {
-        timeZone: "Europe/Moscow",
+        timeZone: APP_TIME_ZONE,
       })
     : "—";
 

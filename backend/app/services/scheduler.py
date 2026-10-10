@@ -1,4 +1,4 @@
-"""Background loop: publish queued profiles + ad slot FIFO / TTL / reminders (MSK)."""
+"""Background loop: publish queued profiles + ad slot FIFO / TTL / reminders (Rome time)."""
 
 from __future__ import annotations
 

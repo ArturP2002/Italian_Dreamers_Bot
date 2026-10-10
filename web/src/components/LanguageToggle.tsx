@@ -13,14 +13,16 @@ export function LanguageToggle({ language, onChange }: Props) {
         className={`lang-toggle__btn${language === "ru" ? " is-active" : ""}`}
         onClick={() => onChange("ru")}
       >
-        Русская версия
+        <span className="lang-toggle__title">Русская версия</span>
+        <span className="lang-toggle__sub">Для женщин</span>
       </button>
       <button
         type="button"
         className={`lang-toggle__btn${language === "it" ? " is-active" : ""}`}
         onClick={() => onChange("it")}
       >
-        Versione italiana
+        <span className="lang-toggle__title">Versione italiana</span>
+        <span className="lang-toggle__sub">Per uomini</span>
       </button>
     </div>
   );

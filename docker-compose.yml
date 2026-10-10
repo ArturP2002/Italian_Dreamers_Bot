@@ -5,7 +5,7 @@ services:
       POSTGRES_USER: dreamers
       POSTGRES_PASSWORD: dreamers
       POSTGRES_DB: dreamers
-      TZ: Europe/Moscow
+      TZ: Europe/Rome
     ports:
       - "5432:5432"
     volumes:
@@ -23,7 +23,7 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql+asyncpg://dreamers:dreamers@postgres:5432/dreamers
-      TZ: Europe/Moscow
+      TZ: Europe/Rome
     ports:
       - "8000:8000"
     volumes:
@@ -44,7 +44,7 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql+asyncpg://dreamers:dreamers@postgres:5432/dreamers
-      TZ: Europe/Moscow
+      TZ: Europe/Rome
       PYTHONPATH: /app/backend
     depends_on:
       - api

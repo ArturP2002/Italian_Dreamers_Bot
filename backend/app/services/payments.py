@@ -418,13 +418,13 @@ async def send_ad_invoice(
         title = "Slot pubblicitario 48h"
         description = (
             f"Pubblicazione «{ad.title}» nel canale Italian Dreamers per 48 ore. "
-            "Lo slot parte alle 10:00 (ora di Mosca) in coda FIFO."
+            "Lo slot parte alle 10:00 (ora di Roma) in coda FIFO."
         )
     else:
         title = "Рекламный слот 48ч"
         description = (
             f"Публикация «{ad.title}» в канале Italian Dreamers на 48 часов. "
-            "Слот стартует в 10:00 (МСК) по очереди FIFO."
+            "Слот стартует в 10:00 (по Риму) по очереди FIFO."
         )
     await send_invoice_stars(
         settings,
@@ -478,13 +478,13 @@ async def complete_ad_payment(
         text = (
             "✅ Pagamento ricevuto.\n\n"
             "La tua pubblicità è in coda FIFO.\n"
-            f"Slot previsto: <b>{slot_local or '—'}</b> (Europe/Moscow), durata 48 ore."
+            f"Slot previsto: <b>{slot_local or '—'}</b> (ora di Roma), durata 48 ore."
         )
     else:
         text = (
             "✅ Оплата получена.\n\n"
             "Реклама в очереди FIFO.\n"
-            f"Слот: <b>{slot_local or '—'}</b> (МСК), длительность 48 часов."
+            f"Слот: <b>{slot_local or '—'}</b> (по Риму), длительность 48 часов."
         )
     await send_message(settings, user.telegram_id, text)
     return ad
