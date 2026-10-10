@@ -689,7 +689,7 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
 
       {step === 4 && (
         <>
-          <h2 className="wizard-title">{t(language, "qCity")}</h2>
+          <h2 className="wizard-title">{t(language, "qWhereLive")}</h2>
           <div className="field">
             <label>{t(language, "qCountry")}</label>
             <input value={form.country} onChange={(e) => setForm((f) => ({ ...f, country: e.target.value }))} />
