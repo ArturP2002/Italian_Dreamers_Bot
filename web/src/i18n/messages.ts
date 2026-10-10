@@ -52,7 +52,7 @@ export const messages = {
     homeGreetingEvening: "Добрый вечер",
     homeBrand: "Italian Dreamers",
     homeCreateTitle: "Создать анкету",
-    homeCreateHint: "12 коротких шагов · публикация после модерации",
+    homeCreateHint: "14 коротких шагов · публикация после модерации",
     homeLettersTitle: "Мои знакомства",
     homeLettersHint: "Входящие письма и ваши диалоги",
     homeLettersSoon: "Открыть входящие",
@@ -153,7 +153,7 @@ export const messages = {
     introTitle: "Расскажите о себе",
     introAccent: "ваша история начинается здесь",
     introBody:
-      "Сейчас вы заполните анкету для публикации в канале: 12 коротких шагов.",
+      "Сейчас вы заполните анкету для публикации в канале: 14 коротких шагов.",
     introPrice: "Публикация: {stars} ★",
     introPayNote:
       "Оплата только после того, как модератор одобрит анкету. Если что-то нужно поправить, мы подскажем.",
@@ -297,7 +297,7 @@ export const messages = {
     homeGreetingEvening: "Buonasera",
     homeBrand: "Italian Dreamers",
     homeCreateTitle: "Crea il profilo",
-    homeCreateHint: "12 passi brevi · pubblicazione dopo la moderazione",
+    homeCreateHint: "14 passi brevi · pubblicazione dopo la moderazione",
     homeLettersTitle: "I miei incontri",
     homeLettersHint: "Lettere in arrivo e le tue chat",
     homeLettersSoon: "Apri la casella",
@@ -397,7 +397,7 @@ export const messages = {
 
     introTitle: "Raccontaci di te",
     introAccent: "la tua storia inizia qui",
-    introBody: "Ora compilerai il tuo profilo per la pubblicazione nel canale: 12 brevi passaggi.",
+    introBody: "Ora compilerai il tuo profilo per la pubblicazione nel canale: 14 brevi passaggi.",
     introPrice: "Pubblicazione: {stars} ★",
     introPayNote:
       "Paghi solo dopo l’approvazione del moderatore. Se serve correggere qualcosa, ti aiutiamo noi.",

@@ -19,6 +19,9 @@ import {
 import { ProfileIntroScreen } from "./ProfileIntroScreen";
 
 const TOTAL_STEPS = 12;
+// Gender gate and guide are numbered before the 12 questions in the progress counter.
+const INTRO_SCREENS = 2;
+const DISPLAY_TOTAL = TOTAL_STEPS + INTRO_SCREENS;
 const VIDEO_STEP = 9;
 const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
 const REQUIRED_PHOTOS = 3;
@@ -76,7 +79,7 @@ function WizardChrome({
   children: ReactNode;
   footer: ReactNode;
 }) {
-  const pct = Math.round((step / TOTAL_STEPS) * 100);
+  const pct = Math.round((step / DISPLAY_TOTAL) * 100);
   return (
     <section className="wizard screen">
       <div className="wizard__top">
@@ -87,7 +90,7 @@ function WizardChrome({
           <div className="wizard__progress-bar" style={{ width: `${pct}%` }} />
         </div>
         <span className="wizard__step-num">
-          {tf(language, "stepOf", { current: step, total: TOTAL_STEPS })}
+          {tf(language, "stepOf", { current: step, total: DISPLAY_TOTAL })}
         </span>
       </div>
       <div className="wizard__body">{children}</div>
@@ -377,7 +380,7 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
     return (
       <WizardChrome
         language={language}
-        step={upcomingStep}
+        step={1}
         onBack={() => setPhase("intro")}
         footer={
           <button
@@ -441,7 +444,7 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
     return (
       <WizardChrome
         language={language}
-        step={upcomingStep}
+        step={2}
         onBack={() => setPhase("gate")}
         footer={
           <>
@@ -594,7 +597,7 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
   );
 
   return (
-    <WizardChrome language={language} step={step} onBack={goBack} footer={nextBtn}>
+    <WizardChrome language={language} step={step + INTRO_SCREENS} onBack={goBack} footer={nextBtn}>
       {error ? <p className="error-text">{error}</p> : null}
 
       {step === 1 && (
