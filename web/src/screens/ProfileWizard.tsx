@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { guideAssets, guidePhotos, introVideo } from "../assets/backgrounds";
-import { VideoNoteOverlay } from "../components/VideoNoteOverlay";
+import { guideAssets, guidePhotos, introVideo, wizardStepPhotos } from "../assets/backgrounds";
+import { VideoNote } from "../components/VideoNote";
 import { COVER_QUESTIONS, type Language, type MessageKey, tf, t } from "../i18n/messages";
 import {
   deleteGreetingVideo,
@@ -115,7 +115,6 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
   const videoInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [audioPlaying, setAudioPlaying] = useState(false);
-  const [introOpen, setIntroOpen] = useState(false);
   const [videoProgress, setVideoProgress] = useState<number | null>(null);
 
   useEffect(() => {
@@ -437,21 +436,8 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
             {t(language, "ageConsentHint")}
           </span>
         </label>
-        <button type="button" className="guide-tile intro-video-tile" onClick={() => setIntroOpen(true)}>
-          <img className="guide-tile__img intro-video-tile__img" src={introVideo.poster} alt="" />
-          <span className="guide-tile__badge" aria-hidden>
-            ▶
-          </span>
-          <span className="guide-tile__label">{t(language, "introVideoWatch")}</span>
-        </button>
+        <VideoNote src={introVideo[language].src} poster={introVideo[language].poster} />
         {error ? <p className="error-text">{error}</p> : null}
-        {introOpen ? (
-          <VideoNoteOverlay
-            src={introVideo[language]}
-            closeLabel={t(language, "introVideoClose")}
-            onClose={() => setIntroOpen(false)}
-          />
-        ) : null}
       </WizardChrome>
     );
   }
@@ -698,6 +684,7 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
             <label>{t(language, "qCity")}</label>
             <input value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} />
           </div>
+          <img className="wizard-step-photo" src={wizardStepPhotos.city} alt="" />
         </>
       )}
 
@@ -711,6 +698,7 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
               autoFocus
             />
           </div>
+          <img className="wizard-step-photo" src={wizardStepPhotos.profession} alt="" />
         </>
       )}
 

@@ -2,7 +2,6 @@
  * Background photo pool from TechnicalSpecification/MiniApp_Reference/Background_Photo/.
  */
 export const backgroundAssets = {
-  bg_positano_run: "/backgrounds/bg_positano_run.jpg",
   bg_spb_kazan_couple: "/backgrounds/bg_spb_kazan_couple.jpg",
 } as const;
 
@@ -34,9 +33,13 @@ export const guideAssets = {
 } as const;
 
 export const introVideo = {
-  poster: "/backgrounds/bg_positano_run.jpg",
-  ru: "/intro/intro_ru.mp4",
-  it: "/intro/intro_it.mp4",
+  ru: { src: "/intro/intro_ru.mp4", poster: "/intro/intro_ru_poster.jpg" },
+  it: { src: "/intro/intro_it.mp4", poster: "/intro/intro_it_poster.jpg" },
+} as const;
+
+export const wizardStepPhotos = {
+  city: "/photos/step_city_positano_run.jpg",
+  profession: "/photos/step_profession_spb_bridge_couple.jpg",
 } as const;
 
 export const guidePhotos = {

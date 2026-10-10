@@ -169,8 +169,6 @@ export const messages = {
     ageConsentHint: "Italian Dreamers — только для взрослых.",
     continue: "Продолжить",
 
-    introVideoWatch: "Смотреть вступление",
-    introVideoClose: "Закрыть",
     guideTitle: "Советы для анкеты",
     guideBody: "Хотите несколько советов, которые помогут сделать анкету классной?",
     guideListen: "Прослушать",
@@ -423,8 +421,6 @@ export const messages = {
     ageConsentHint: "Italian Dreamers è solo per adulti.",
     continue: "Continua",
 
-    introVideoWatch: "Guarda l’introduzione",
-    introVideoClose: "Chiudi",
     guideTitle: "Consigli per il profilo",
     guideBody: "Vuoi alcuni consigli per rendere il profilo più attraente?",
     guideListen: "Ascolta",
