@@ -151,7 +151,9 @@ export function MessageCardScreen({ language, onCreditsChange }: Props) {
   const photo = isIncoming ? item.sender_photo_url : item.profile_photo_url;
   const title = isIncoming
     ? `${item.sender_name ?? "—"}, ${item.sender_age ?? "—"}`
-    : `${item.profile_name ?? "—"}, ${item.profile_age ?? "—"}`;
+    : item.profile_deleted
+      ? (item.profile_name ?? "—")
+      : `${item.profile_name ?? "—"}, ${item.profile_age ?? "—"}`;
 
   return (
     <section className="screen screen--milky">
@@ -186,10 +188,14 @@ export function MessageCardScreen({ language, onCreditsChange }: Props) {
           </button>
         </div>
 
+        {item.profile_deleted ? (
+          <p className="letter-card__notice">{t(language, "profileDeletedNote")}</p>
+        ) : null}
+
         <h2 className="letter-card__label">{t(language, "cardLetter")}</h2>
         <p className="letter-card__text">{letterText}</p>
 
-        {!isIncoming && item.status === "pending" ? (
+        {!isIncoming && item.status === "pending" && !item.profile_deleted ? (
           <p className="home-meta" style={{ padding: "0 16px 12px" }}>
             {t(language, "writePushHint")}
           </p>

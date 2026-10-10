@@ -41,12 +41,14 @@ async def create_complaint(
         mr = result.scalar_one_or_none()
         if mr is None:
             raise ComplaintServiceError("not_found", "Message request not found")
-        profile_result = await session.execute(select(Profile).where(Profile.id == mr.profile_id))
-        profile = profile_result.scalar_one()
-        if reporter.id not in {mr.sender_user_id, profile.user_id}:
+        owner_id = mr.profile_owner_user_id
+        if mr.profile_id is not None:
+            profile_result = await session.execute(select(Profile).where(Profile.id == mr.profile_id))
+            owner_id = profile_result.scalar_one().user_id
+        if reporter.id not in {mr.sender_user_id, owner_id}:
             raise ComplaintServiceError("forbidden", "Not a participant")
         if reporter.id == mr.sender_user_id:
-            resolved_reported = profile.user_id
+            resolved_reported = owner_id
         else:
             resolved_reported = mr.sender_user_id
 

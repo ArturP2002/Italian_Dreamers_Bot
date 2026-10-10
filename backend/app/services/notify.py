@@ -149,6 +149,32 @@ async def notify_user_published(
         logger.exception("Failed to notify user %s about publish", user.telegram_id)
 
 
+async def notify_user_profile_deleted(
+    settings: Settings,
+    *,
+    user: User,
+    profile_name: str,
+) -> bool:
+    lang = user.language_code if user.language_code in {"ru", "it"} else "ru"
+    name = html.escape(profile_name, quote=False)
+    if lang == "it":
+        text = (
+            f"Il profilo <b>{name}</b> è stato rimosso dal canale ed eliminato. "
+            "Se vuoi, puoi compilarne uno nuovo."
+        )
+    else:
+        text = (
+            f"Анкета <b>{name}</b> снята с публикации и удалена. "
+            "Если захотите — можно заполнить новую."
+        )
+    try:
+        await send_message(settings, user.telegram_id, text)
+    except Exception:
+        logger.exception("Failed to notify user %s about take-down", user.telegram_id)
+        return False
+    return True
+
+
 async def notify_new_letter(
     settings: Settings,
     *,

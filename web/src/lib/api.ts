@@ -224,7 +224,7 @@ export type MessageRequestItem = {
   sender_name: string | null;
   sender_age: number | null;
   sender_photo_url: string | null;
-  profile_id: number;
+  profile_id: number | null;
   profile_name: string | null;
   profile_age: number | null;
   profile_photo_url: string | null;
@@ -232,6 +232,7 @@ export type MessageRequestItem = {
   profile_about: string | null;
   counterpart_username: string | null;
   counterpart_telegram_link: string | null;
+  profile_deleted: boolean;
   unlocked_at: string | null;
   created_at: string;
   responded_at: string | null;
@@ -281,6 +282,7 @@ export type ChatThread = {
   messages: ChatMessageItem[];
   counterpart_name: string | null;
   counterpart_telegram_link: string | null;
+  profile_deleted: boolean;
   can_send: boolean;
 };
 
@@ -542,6 +544,50 @@ export async function adminMarkPaid(id: number): Promise<AdminProfileDetail> {
 
 export async function adminPublishNow(id: number): Promise<AdminProfileDetail> {
   return apiFetchJsonOrThrow(`/api/admin/profiles/${id}/publish-now`, { method: "POST" });
+}
+
+export type AdminTakedown = {
+  id: number;
+  profile_id: number;
+  user_id: number | null;
+  telegram_id: number | null;
+  telegram_username: string | null;
+  name: string;
+  age: number;
+  gender: string | null;
+  city: string;
+  country: string;
+  published_at: string | null;
+  taken_down_at: string;
+  admin_username: string | null;
+  deleted_messages: number;
+  failed_messages: number;
+  closed_letters: number;
+  open_chats: number;
+  user_notified: boolean;
+};
+
+export type AdminTakedownResult = AdminTakedown & { complete: boolean };
+
+export type AdminTakedownPage = {
+  items: AdminTakedown[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+};
+
+export async function adminTakeDownProfile(id: number, notifyUser: boolean): Promise<AdminTakedownResult> {
+  return apiFetchJsonOrThrow(`/api/admin/profiles/${id}/takedown`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ notify_user: notifyUser }),
+  });
+}
+
+export async function adminFetchTakedowns(opts: { limit: number; offset: number }): Promise<AdminTakedownPage> {
+  const params = new URLSearchParams({ limit: String(opts.limit), offset: String(opts.offset) });
+  return apiFetchJsonOrThrow(`/api/admin/takedowns?${params.toString()}`);
 }
 
 export type AdminUserListPage = {

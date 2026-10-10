@@ -5,8 +5,9 @@ import { fetchInbox, mediaUrl, type MessageRequestItem } from "../lib/api";
 
 type Props = { language: Language };
 
-function statusKey(status: string): Parameters<typeof t>[1] {
-  switch (status) {
+function statusKey(item: MessageRequestItem): Parameters<typeof t>[1] {
+  if (item.profile_deleted) return "inboxStatusProfileDeleted";
+  switch (item.status) {
     case "pending":
       return "inboxStatusPending";
     case "replied":
@@ -26,6 +27,7 @@ function cardTitle(item: MessageRequestItem): string {
   if (item.direction === "incoming") {
     return `${item.sender_name ?? "—"}, ${item.sender_age ?? "—"}`;
   }
+  if (item.profile_deleted) return item.profile_name ?? "—";
   return `${item.profile_name ?? "—"}, ${item.profile_age ?? "—"}`;
 }
 
@@ -97,7 +99,7 @@ export function InboxScreen({ language }: Props) {
                   </div>
                   <div className="inbox-card__body">
                     <strong>{cardTitle(item)}</strong>
-                    <span className="inbox-card__status">{t(language, statusKey(item.status))}</span>
+                    <span className="inbox-card__status">{t(language, statusKey(item))}</span>
                     <p>{previewText(item, language)}</p>
                   </div>
                 </Link>
@@ -126,7 +128,7 @@ export function InboxScreen({ language }: Props) {
                   </div>
                   <div className="inbox-card__body">
                     <strong>{cardTitle(item)}</strong>
-                    <span className="inbox-card__status">{t(language, statusKey(item.status))}</span>
+                    <span className="inbox-card__status">{t(language, statusKey(item))}</span>
                     <p>{previewText(item, language)}</p>
                   </div>
                 </Link>

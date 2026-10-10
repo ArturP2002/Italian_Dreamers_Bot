@@ -268,7 +268,7 @@ async def reject_message_request(
     mr: MessageRequest,
     actor: User,
 ) -> MessageRequest:
-    if mr.profile.user_id != actor.id:
+    if mr.profile is None or mr.profile.user_id != actor.id:
         raise MessageServiceError("forbidden", "Only recipient can reject")
     if mr.status != MessageRequestStatus.PENDING.value:
         raise MessageServiceError("bad_status", "Request is not pending")
@@ -291,7 +291,7 @@ async def reply_message_request(
     actor: User,
     reply_text: str,
 ) -> MessageRequest:
-    if mr.profile.user_id != actor.id:
+    if mr.profile is None or mr.profile.user_id != actor.id:
         raise MessageServiceError("forbidden", "Only recipient can reply")
     if mr.status != MessageRequestStatus.PENDING.value:
         raise MessageServiceError("bad_status", "Request is not pending")
@@ -340,6 +340,8 @@ async def unlock_with_credit(
         MessageRequestStatus.CHATTING.value,
     }:
         return mr
+    if mr.profile is None:
+        raise MessageServiceError("profile_deleted", "The profile was taken down and deleted")
     if mr.status != MessageRequestStatus.REPLIED.value:
         raise MessageServiceError("bad_status", "Wait for a reply before paying")
     if actor.message_credits < 1:
@@ -405,6 +407,8 @@ async def send_chat_message(
     actor: User,
     text: str,
 ) -> ChatMessage:
+    if mr.profile is None:
+        raise MessageServiceError("profile_deleted", "The profile was taken down and deleted")
     owner_id = mr.profile.user_id
     if actor.id not in {mr.sender_user_id, owner_id}:
         raise MessageServiceError("forbidden", "Not a participant")

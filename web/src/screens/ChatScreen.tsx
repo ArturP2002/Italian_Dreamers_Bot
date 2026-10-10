@@ -97,23 +97,27 @@ export function ChatScreen({ language }: Props) {
 
       {error ? <p className="form-error">{error}</p> : null}
 
-      <form
-        className="chat-composer"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void onSend();
-        }}
-      >
-        <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder={t(language, "chatPlaceholder")}
-          disabled={busy || !thread?.can_send}
-        />
-        <button type="submit" className="btn btn--dark" disabled={busy || !text.trim()}>
-          {t(language, "chatSend")}
-        </button>
-      </form>
+      {thread?.profile_deleted ? (
+        <p className="chat-closed-note">{t(language, "chatProfileDeletedNote")}</p>
+      ) : (
+        <form
+          className="chat-composer"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void onSend();
+          }}
+        >
+          <input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder={t(language, "chatPlaceholder")}
+            disabled={busy || !thread?.can_send}
+          />
+          <button type="submit" className="btn btn--dark" disabled={busy || !text.trim()}>
+            {t(language, "chatSend")}
+          </button>
+        </form>
+      )}
     </section>
   );
 }

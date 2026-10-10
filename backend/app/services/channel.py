@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from html import escape
 from pathlib import Path
@@ -22,6 +23,7 @@ from app.services.greeting_video import video_path
 from app.services.telegram_api import (
     TelegramApiError,
     bot_has_main_web_app,
+    delete_message,
     send_media_album,
     send_message,
     send_photo_file,
@@ -262,6 +264,7 @@ async def publish_profile_to_channel(
 
     splash_resp = await send_photo_file(settings, settings.channel_id, splash_path)
     splash_message_id = (splash_resp.get("result") or {}).get("message_id")
+    post_message_ids: list[int] = [splash_message_id] if splash_message_id else []
 
     greeting_video = video_path(profile.greeting_video_file_id)
     photos = sorted(profile.photos or [], key=lambda p: p.position)[:CHANNEL_PHOTOS]
@@ -288,6 +291,8 @@ async def publish_profile_to_channel(
             disable_link_preview=True,
         )
         channel_message_id = (msg.get("result") or {}).get("message_id")
+        if channel_message_id:
+            post_message_ids.append(channel_message_id)
     else:
         album_caption = escape(caption, quote=False) if caption_fits else None
         photo_items: list[tuple[str, str | Path]] = [
@@ -301,6 +306,8 @@ async def publish_profile_to_channel(
             else:
                 resp = await send_photo_media(settings, settings.channel_id, source, caption=album_caption)
             channel_message_id = (resp.get("result") or {}).get("message_id")
+            if channel_message_id:
+                post_message_ids.append(channel_message_id)
         else:
             try:
                 group = await send_media_album(
@@ -316,20 +323,63 @@ async def publish_profile_to_channel(
             results = group.get("result") or []
             if results:
                 channel_message_id = results[0].get("message_id")
+            post_message_ids.extend(r["message_id"] for r in results if r.get("message_id"))
 
-        await send_message(
+        write_msg = await send_message(
             settings,
             settings.channel_id,
             t["write_prompt"] if caption_fits else full_text,
             reply_markup=markup,
             disable_link_preview=True,
         )
+        write_message_id = (write_msg.get("result") or {}).get("message_id")
+        if write_message_id:
+            post_message_ids.append(write_message_id)
 
     profile.status = ProfileStatus.PUBLISHED.value
     profile.published_at = datetime.now(timezone.utc)
     profile.splash_message_id = splash_message_id
     profile.channel_message_id = channel_message_id
+    profile.channel_post_message_ids = post_message_ids
     session.add(profile)
     await session.commit()
     await session.refresh(profile)
     return profile
+
+
+@dataclass
+class TakedownResult:
+    deleted: int
+    failed: list[int]
+    # False for profiles published before all message ids were stored: the Write post stays.
+    complete: bool
+
+
+def _publication_message_ids(profile: Profile) -> tuple[list[int], bool]:
+    if profile.channel_post_message_ids:
+        return [int(m) for m in profile.channel_post_message_ids if m], True
+    legacy = [m for m in (profile.splash_message_id, profile.channel_message_id) if m]
+    return [int(m) for m in legacy], False
+
+
+async def delete_publication_messages(settings: Settings, profile: Profile) -> TakedownResult:
+    """Delete every channel message of the publication; a message already gone counts as deleted."""
+    message_ids, complete = _publication_message_ids(profile)
+    deleted = 0
+    failed: list[int] = []
+    if settings.channel_id:
+        for message_id in message_ids:
+            try:
+                await delete_message(settings, settings.channel_id, message_id)
+                deleted += 1
+            except TelegramApiError as exc:
+                description = str((exc.response or {}).get("description", "")).lower()
+                if "not found" in description:
+                    deleted += 1
+                    continue
+                logger.warning("Failed to delete channel message %s of profile %s: %s", message_id, profile.id, exc)
+                failed.append(message_id)
+            except Exception:
+                logger.exception("Failed to delete channel message %s of profile %s", message_id, profile.id)
+                failed.append(message_id)
+    return TakedownResult(deleted=deleted, failed=failed, complete=complete)

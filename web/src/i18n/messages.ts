@@ -95,6 +95,10 @@ export const messages = {
     inboxStatusUnlocked: "Чат открыт",
     inboxStatusChatting: "Переписка",
     inboxStatusRejected: "Отклонено",
+    inboxStatusProfileDeleted: "Анкета удалена",
+    profileDeletedNote: "Анкета снята с публикации и удалена.",
+    chatProfileDeletedNote:
+      "Анкета снята с публикации и удалена. История переписки сохранена, но писать в этот чат больше нельзя.",
     showTranslation: "Перевод",
     showOriginal: "Оригинал",
     reply: "Ответить",
@@ -348,6 +352,10 @@ export const messages = {
     inboxStatusUnlocked: "Chat aperta",
     inboxStatusChatting: "In chat",
     inboxStatusRejected: "Rifiutata",
+    inboxStatusProfileDeleted: "Profilo eliminato",
+    profileDeletedNote: "Il profilo è stato rimosso dal canale ed eliminato.",
+    chatProfileDeletedNote:
+      "Il profilo è stato rimosso dal canale ed eliminato. La cronologia resta, ma non è più possibile scrivere in questa chat.",
     showTranslation: "Traduzione",
     showOriginal: "Originale",
     reply: "Rispondi",

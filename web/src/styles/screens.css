@@ -1024,6 +1024,19 @@
   color: var(--color-graphite);
 }
 
+.admin-btn--danger {
+  border-color: rgba(166, 52, 40, 0.45);
+  color: #a63428;
+}
+
+.admin-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: rgba(239, 228, 210, 0.85);
+}
+
 .admin-btn--block {
   display: block;
   width: 100%;
@@ -1561,6 +1574,17 @@
   margin: 0 0 8px;
   line-height: 1.5;
   white-space: pre-wrap;
+}
+
+.letter-card__notice,
+.chat-closed-note {
+  margin: 12px 0 4px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: rgba(166, 52, 40, 0.08);
+  color: #8a2c22;
+  font-size: 14px;
+  line-height: 1.45;
 }
 
 .letter-card__actions {

@@ -9,6 +9,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     DateTime,
+    JSON,
     ForeignKey,
     Integer,
     String,
@@ -64,6 +65,8 @@ class MessageRequestStatus(StrEnum):
     UNLOCKED = "unlocked"
     CHATTING = "chatting"
     REJECTED = "rejected"
+    # Recipient profile was taken down and deleted before the chat was opened.
+    CLOSED = "closed"
     # legacy alias kept for compatibility
     ACCEPTED = "accepted"
 
@@ -197,6 +200,8 @@ class Profile(Base):
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     channel_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     splash_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # Every channel message of the publication (splash, album items, Write post) for take-down.
+    channel_post_message_ids: Mapped[list[int] | None] = mapped_column(JSON, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -228,9 +233,9 @@ class Profile(Base):
         passive_deletes=True,
         order_by="ProfilePhoto.position",
     )
+    # Letters outlive a deleted profile (FK is SET NULL) so the other side keeps the chat history.
     message_requests: Mapped[list[MessageRequest]] = relationship(
         back_populates="profile",
-        cascade="all, delete-orphan",
         passive_deletes=True,
     )
 
@@ -255,12 +260,18 @@ class MessageRequest(Base):
     __tablename__ = "message_requests"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    profile_id: Mapped[int] = mapped_column(
-        ForeignKey("profiles.id", ondelete="CASCADE"), nullable=False, index=True
+    profile_id: Mapped[int | None] = mapped_column(
+        ForeignKey("profiles.id", ondelete="SET NULL"), nullable=True, index=True
     )
     sender_user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    # Set when the recipient profile is taken down and deleted.
+    profile_name_snapshot: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    profile_owner_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    profile_deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     text_translated: Mapped[str | None] = mapped_column(Text, nullable=True)
     reply_text: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -279,7 +290,7 @@ class MessageRequest(Base):
     )
     responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    profile: Mapped[Profile] = relationship(back_populates="message_requests")
+    profile: Mapped[Profile | None] = relationship(back_populates="message_requests")
     sender: Mapped[User] = relationship(foreign_keys=[sender_user_id])
     chat_messages: Mapped[list[ChatMessage]] = relationship(
         back_populates="message_request",
@@ -304,6 +315,39 @@ class ChatMessage(Base):
 
     message_request: Mapped[MessageRequest] = relationship(back_populates="chat_messages")
     sender: Mapped[User] = relationship()
+
+
+class ProfileTakedown(Base):
+    """Journal of profiles taken down from the channel; the profile itself is deleted."""
+
+    __tablename__ = "profile_takedowns"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    profile_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    telegram_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    telegram_username: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    age: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    gender: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    city: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    country: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    admin_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    deleted_messages: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    failed_messages: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    closed_letters: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    open_chats: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    user_notified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+
+    admin: Mapped[User | None] = relationship(foreign_keys=[admin_user_id])
 
 
 class Payment(Base):

@@ -47,6 +47,7 @@ from app.services.payments import (
     create_ad_payment,
     create_publish_payment,
 )
+from app.services.takedown import list_takedowns, take_down_and_delete_profile
 from app.services.telegram_api import get_bot_username, send_message
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -377,6 +378,105 @@ async def admin_publish_now(
     profile = await get_profile_admin(session, profile_id)
     assert profile is not None
     return _detail(profile)
+
+
+class TakedownBody(BaseModel):
+    notify_user: bool = True
+
+
+class TakedownItem(BaseModel):
+    id: int
+    profile_id: int
+    user_id: int | None
+    telegram_id: int | None
+    telegram_username: str | None
+    name: str
+    age: int
+    gender: str | None
+    city: str
+    country: str
+    published_at: datetime | None
+    taken_down_at: datetime
+    admin_username: str | None
+    deleted_messages: int
+    failed_messages: int
+    closed_letters: int
+    open_chats: int
+    user_notified: bool
+
+
+class TakedownOut(TakedownItem):
+    # False for profiles published before all channel message ids were stored.
+    complete: bool
+
+
+class TakedownPage(BaseModel):
+    items: list[TakedownItem]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
+
+
+def _takedown_item(entry) -> dict:
+    return dict(
+        id=entry.id,
+        profile_id=entry.profile_id,
+        user_id=entry.user_id,
+        telegram_id=entry.telegram_id,
+        telegram_username=entry.telegram_username,
+        name=entry.name,
+        age=entry.age,
+        gender=entry.gender,
+        city=entry.city,
+        country=entry.country,
+        published_at=entry.published_at,
+        taken_down_at=entry.created_at,
+        admin_username=entry.admin.telegram_username if entry.admin else None,
+        deleted_messages=entry.deleted_messages,
+        failed_messages=entry.failed_messages,
+        closed_letters=entry.closed_letters,
+        open_chats=entry.open_chats,
+        user_notified=entry.user_notified,
+    )
+
+
+@router.post("/profiles/{profile_id}/takedown", response_model=TakedownOut)
+async def admin_take_down(
+    profile_id: int,
+    body: TakedownBody,
+    auth: AuthContext = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> TakedownOut:
+    profile = await get_profile_admin(session, profile_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    try:
+        outcome = await take_down_and_delete_profile(
+            session, settings, profile=profile, admin=auth.user, notify_user=body.notify_user
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return TakedownOut(**_takedown_item(outcome.entry), complete=outcome.complete)
+
+
+@router.get("/takedowns", response_model=TakedownPage)
+async def admin_takedowns(
+    limit: int = Query(default=25, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    _auth: AuthContext = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+) -> TakedownPage:
+    entries, total = await list_takedowns(session, limit=limit, offset=offset)
+    items = [TakedownItem(**_takedown_item(e)) for e in entries]
+    return TakedownPage(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+        has_more=(offset + len(items)) < total,
+    )
 
 
 class UserListPage(BaseModel):

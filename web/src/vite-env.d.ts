@@ -35,6 +35,7 @@ type TelegramWebApp = {
   openTelegramLink?: (url: string) => void;
   openLink?: (url: string) => void;
   showAlert?: (message: string, callback?: () => void) => void;
+  showConfirm?: (message: string, callback?: (ok: boolean) => void) => void;
   showPopup?: (params: {
     title?: string;
     message: string;

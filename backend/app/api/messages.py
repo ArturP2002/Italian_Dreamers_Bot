@@ -59,7 +59,7 @@ class MessageRequestOut(BaseModel):
     sender_name: str | None
     sender_age: int | None
     sender_photo_url: str | None
-    profile_id: int
+    profile_id: int | None
     profile_name: str | None
     profile_age: int | None
     profile_photo_url: str | None
@@ -67,6 +67,7 @@ class MessageRequestOut(BaseModel):
     profile_about: str | None
     counterpart_username: str | None
     counterpart_telegram_link: str | None
+    profile_deleted: bool = False
     unlocked_at: datetime | None
     created_at: datetime
     responded_at: datetime | None
@@ -109,6 +110,7 @@ class ChatOut(BaseModel):
     messages: list[ChatMessageOut]
     counterpart_name: str | None
     counterpart_telegram_link: str | None
+    profile_deleted: bool = False
     can_send: bool
 
 
@@ -210,6 +212,7 @@ def _raise_service(exc: MessageServiceError) -> None:
         "bad_status": status.HTTP_409_CONFLICT,
         "no_credits": status.HTTP_402_PAYMENT_REQUIRED,
         "locked": status.HTTP_409_CONFLICT,
+        "profile_deleted": status.HTTP_409_CONFLICT,
     }
     raise HTTPException(status_code=mapping.get(exc.code, 400), detail={"code": exc.code, "message": exc.message})
 
@@ -249,13 +252,14 @@ def _serialize_request(mr: MessageRequest, viewer: User) -> MessageRequestOut:
         sender_age=mr.sender_age,
         sender_photo_url=_photo_url(mr.sender_photo_file_id),
         profile_id=mr.profile_id,
-        profile_name=profile.name if profile else None,
+        profile_name=profile.name if profile else mr.profile_name_snapshot,
         profile_age=profile.age if profile else None,
         profile_photo_url=profile_photo,
         profile_city=profile.city if profile else None,
         profile_about=profile.about if profile else None,
         counterpart_username=counterpart_username,
         counterpart_telegram_link=_tg_link(counterpart_username),
+        profile_deleted=mr.profile_deleted_at is not None,
         unlocked_at=mr.unlocked_at,
         created_at=mr.created_at,
         responded_at=mr.responded_at,
@@ -496,12 +500,12 @@ async def get_chat(
     }:
         raise HTTPException(status_code=409, detail="Chat not unlocked")
     msgs = await list_chat_messages(session, mr)
-    is_incoming = mr.profile.user_id == auth.user.id
+    is_incoming = bool(mr.profile and mr.profile.user_id == auth.user.id)
     if is_incoming:
         counterpart = mr.sender_name
         link = _tg_link(mr.sender.telegram_username if mr.sender else None)
     else:
-        counterpart = mr.profile.name if mr.profile else None
+        counterpart = mr.profile.name if mr.profile else mr.profile_name_snapshot
         uname = (
             (mr.profile.telegram_username if mr.profile else None)
             or (mr.profile.user.telegram_username if mr.profile and mr.profile.user else None)
@@ -523,7 +527,8 @@ async def get_chat(
         ],
         counterpart_name=counterpart,
         counterpart_telegram_link=link,
-        can_send=True,
+        profile_deleted=mr.profile is None,
+        can_send=mr.profile is not None,
     )
 
 

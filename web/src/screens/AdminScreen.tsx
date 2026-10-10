@@ -13,6 +13,7 @@ import {
   adminFetchProfile,
   adminFetchProfiles,
   adminFetchStats,
+  adminFetchTakedowns,
   adminFetchUsers,
   adminGrantCredits,
   adminMarkAdPaid,
@@ -22,6 +23,7 @@ import {
   adminRejectProfile,
   adminResolveComplaint,
   adminScheduleProfile,
+  adminTakeDownProfile,
   adminUnblockUser,
   mediaUrl,
   type AdminAd,
@@ -30,6 +32,8 @@ import {
   type AdminProfileDetail,
   type AdminProfileListItem,
   type AdminStats,
+  type AdminTakedown,
+  type AdminTakedownResult,
   type AdminUser,
 } from "../lib/api";
 import { APP_TIME_ZONE, toAppZoneInputValue } from "../lib/time";
@@ -40,6 +44,7 @@ type Tab =
   | "new"
   | "queue"
   | "published"
+  | "takedowns"
   | "ads"
   | "complaints"
   | "users"
@@ -62,7 +67,7 @@ type ActionOutcome = {
   title: string;
   subject: string;
   lines: string[];
-  reopenLabel: string;
+  reopenLabel?: string;
 };
 
 type AdFilter = "pending" | "queue" | "all";
@@ -77,6 +82,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "new", label: "Новые" },
   { id: "queue", label: "Очередь" },
   { id: "published", label: "Опубликованы" },
+  { id: "takedowns", label: "Сняты" },
   { id: "ads", label: "Реклама" },
   { id: "complaints", label: "Жалобы" },
   { id: "users", label: "Пользователи" },
@@ -84,7 +90,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "stats", label: "Статистика" },
 ];
 
-/** Page size for admin profile lists (Новые / Очередь / Опубликованы). */
+/** Page size for admin profile lists (Новые / Очередь / Опубликованы) and the takedown journal. */
 const PROFILE_PAGE_SIZE = 10;
 /** Page size for admin users list. */
 const USER_PAGE_SIZE = 10;
@@ -94,6 +100,24 @@ function profileBelongsToTab(status: string, tab: Tab): boolean {
   if (tab === "queue") return status === "queued" || status === "awaiting_payment";
   if (tab === "published") return status === "published";
   return true;
+}
+
+type ProfileTab = "new" | "queue" | "published";
+
+function isProfileTab(tab: Tab): tab is ProfileTab {
+  return tab === "new" || tab === "queue" || tab === "published";
+}
+
+async function confirmAction(message: string): Promise<boolean> {
+  const tg = window.Telegram?.WebApp;
+  if (tg?.showConfirm) {
+    try {
+      return await new Promise<boolean>((resolve) => tg.showConfirm!(message, resolve));
+    } catch {
+      /* unsupported client version */
+    }
+  }
+  return window.confirm(message);
 }
 
 function adBelongsToFilter(status: string, filter: AdFilter): boolean {
@@ -255,6 +279,10 @@ export function AdminScreen({ language }: Props) {
   const [payments, setPayments] = useState<AdminPayment[]>([]);
   const [ads, setAds] = useState<AdminAd[]>([]);
   const [complaints, setComplaints] = useState<AdminComplaint[]>([]);
+  const [takedowns, setTakedowns] = useState<AdminTakedown[]>([]);
+  const [takedownsTotal, setTakedownsTotal] = useState(0);
+  const [takedownsHasMore, setTakedownsHasMore] = useState(false);
+  const [takedownsLoadingMore, setTakedownsLoadingMore] = useState(false);
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selectedAdId, setSelectedAdId] = useState<number | null>(null);
@@ -265,6 +293,7 @@ export function AdminScreen({ language }: Props) {
   const [feedback, setFeedback] = useState("");
   const [scheduleLocal, setScheduleLocal] = useState("");
   const [creditsDelta, setCreditsDelta] = useState("9");
+  const [notifyOnTakedown, setNotifyOnTakedown] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -320,9 +349,8 @@ export function AdminScreen({ language }: Props) {
   const loadList = useCallback(async () => {
     setError(null);
     try {
-      if (tab === "new" || tab === "queue" || tab === "published") {
-        const status = tab === "new" ? "new" : tab === "queue" ? "queue" : "published";
-        const page = await adminFetchProfiles(status, {
+      if (isProfileTab(tab)) {
+        const page = await adminFetchProfiles(tab, {
           limit: PROFILE_PAGE_SIZE,
           offset: 0,
         });
@@ -331,6 +359,11 @@ export function AdminScreen({ language }: Props) {
         setProfilesHasMore(page.has_more);
       } else if (tab === "ads") {
         setAds(await adminFetchAds(adFilter === "all" ? undefined : adFilter));
+      } else if (tab === "takedowns") {
+        const page = await adminFetchTakedowns({ limit: PROFILE_PAGE_SIZE, offset: 0 });
+        setTakedowns(page.items);
+        setTakedownsTotal(page.total);
+        setTakedownsHasMore(page.has_more);
       } else if (tab === "complaints") {
         setComplaints(await adminFetchComplaints("open"));
       } else if (tab === "users") {
@@ -350,12 +383,11 @@ export function AdminScreen({ language }: Props) {
 
   const loadMoreProfiles = async () => {
     if (profilesLoadingMore || !profilesHasMore) return;
-    if (tab !== "new" && tab !== "queue" && tab !== "published") return;
+    if (!isProfileTab(tab)) return;
     setProfilesLoadingMore(true);
     setError(null);
     try {
-      const status = tab === "new" ? "new" : tab === "queue" ? "queue" : "published";
-      const page = await adminFetchProfiles(status, {
+      const page = await adminFetchProfiles(tab, {
         limit: PROFILE_PAGE_SIZE,
         offset: items.length,
       });
@@ -369,6 +401,25 @@ export function AdminScreen({ language }: Props) {
       setError(e instanceof Error ? e.message : "Load failed");
     } finally {
       setProfilesLoadingMore(false);
+    }
+  };
+
+  const loadMoreTakedowns = async () => {
+    if (takedownsLoadingMore || !takedownsHasMore || tab !== "takedowns") return;
+    setTakedownsLoadingMore(true);
+    setError(null);
+    try {
+      const page = await adminFetchTakedowns({ limit: PROFILE_PAGE_SIZE, offset: takedowns.length });
+      setTakedowns((prev) => {
+        const seen = new Set(prev.map((e) => e.id));
+        return [...prev, ...page.items.filter((e) => !seen.has(e.id))];
+      });
+      setTakedownsTotal(page.total);
+      setTakedownsHasMore(page.has_more);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Load failed");
+    } finally {
+      setTakedownsLoadingMore(false);
     }
   };
 
@@ -422,14 +473,18 @@ export function AdminScreen({ language }: Props) {
 
   const title = useMemo(() => t(language, "adminTitle"), [language]);
 
-  async function run(action: () => Promise<unknown>, okMsg: string, outcome?: ActionOutcome) {
+  async function run(
+    action: () => Promise<unknown>,
+    okMsg: string,
+    outcome?: ActionOutcome | (() => ActionOutcome),
+  ) {
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
       const payload = await action();
       if (outcome) {
-        setResult(outcome);
+        setResult(typeof outcome === "function" ? outcome() : outcome);
         setFeedback("");
       } else {
         setNotice(okMsg);
@@ -524,9 +579,11 @@ export function AdminScreen({ language }: Props) {
           <button type="button" className="admin-btn admin-btn--primary" onClick={() => closeResult(true)}>
             К списку
           </button>
-          <button type="button" className="admin-btn" onClick={() => closeResult(false)}>
-            {result.reopenLabel}
-          </button>
+          {result.reopenLabel ? (
+            <button type="button" className="admin-btn" onClick={() => closeResult(false)}>
+              {result.reopenLabel}
+            </button>
+          ) : null}
         </article>
       ) : (
         <>
@@ -746,6 +803,82 @@ export function AdminScreen({ language }: Props) {
             </div>
           ) : null}
 
+          {detail.status === "published" ? (
+            <div className="admin-actions">
+              {detail.published_at ? (
+                <p className="admin-meta">Опубликована: {formatDt(detail.published_at)} по Риму</p>
+              ) : null}
+              <p className="admin-meta">
+                Анкета удалится из канала и из базы вместе с фото и видео. Чтобы опубликоваться снова, пользователь
+                заполнит анкету заново, пройдёт модерацию и оплатит.
+              </p>
+              <label className="admin-check">
+                <input
+                  type="checkbox"
+                  checked={notifyOnTakedown}
+                  onChange={(e) => setNotifyOnTakedown(e.target.checked)}
+                />
+                <span>Сообщить пользователю, что анкета снята и удалена</span>
+              </label>
+              <button
+                type="button"
+                className="admin-btn admin-btn--danger"
+                disabled={busy}
+                onClick={async () => {
+                  const ok = await confirmAction(
+                    `Точно снять анкету «${detail.name}» с публикации и удалить все её данные? Фото, видео и текст анкеты удалятся безвозвратно.`,
+                  );
+                  if (!ok) return;
+                  let takedown: AdminTakedownResult | null = null;
+                  void run(
+                    async () => {
+                      takedown = await adminTakeDownProfile(detail.id, notifyOnTakedown);
+                      return takedown;
+                    },
+                    "Анкета снята и удалена",
+                    () => {
+                      const r = takedown!;
+                      const lines = [`Удалено из канала сообщений: ${r.deleted_messages}.`];
+                      if (r.failed_messages > 0) {
+                        lines.push(
+                          `Не удалось удалить: ${r.failed_messages}. Удалите их в канале вручную — проверьте, что у бота есть право удалять сообщения.`,
+                        );
+                      }
+                      if (!r.complete) {
+                        lines.push(
+                          "Анкета опубликована до этого обновления: пост с кнопкой «Написать» удалите в канале вручную.",
+                        );
+                      }
+                      lines.push("Фото, видео и данные анкеты удалены.");
+                      if (r.open_chats > 0) {
+                        lines.push(`Открытых чатов: ${r.open_chats} — собеседники увидят пометку, что анкета удалена.`);
+                      }
+                      if (r.closed_letters > 0) {
+                        lines.push(`Закрыто писем без ответа: ${r.closed_letters}.`);
+                      }
+                      lines.push(
+                        r.user_notified
+                          ? "Пользователю отправлено уведомление."
+                          : notifyOnTakedown
+                            ? "Уведомление пользователю не доставлено."
+                            : "Пользователь не уведомлён.",
+                        "Запись сохранена во вкладке «Сняты».",
+                      );
+                      return {
+                        tone: "rejected",
+                        title: "Анкета снята и удалена",
+                        subject: `${r.name}, ${r.age}`,
+                        lines,
+                      };
+                    },
+                  );
+                }}
+              >
+                Снять с публикации и удалить
+              </button>
+            </div>
+          ) : null}
+
           <div className="admin-actions">
             <p className="admin-label">Пользователь · кредиты {detail.message_credits}</p>
             <div className="admin-row">
@@ -916,7 +1049,7 @@ export function AdminScreen({ language }: Props) {
 
       {selectedId == null &&
       selectedAdId == null &&
-      (tab === "new" || tab === "queue" || tab === "published") ? (
+      isProfileTab(tab) ? (
         <>
           <ul className="admin-list">
             {items.length === 0 ? <li className="admin-empty">Пусто</li> : null}
@@ -983,6 +1116,55 @@ export function AdminScreen({ language }: Props) {
             </li>
           ))}
         </ul>
+      ) : null}
+
+      {tab === "takedowns" ? (
+        <>
+          <ul className="admin-list">
+            {takedowns.length === 0 ? <li className="admin-empty">Снятых анкет пока нет</li> : null}
+            {takedowns.map((e) => (
+              <li key={e.id} className="admin-payment">
+                <strong>
+                  {e.name}, {e.age}
+                </strong>
+                <span>
+                  {[e.city, e.country].filter(Boolean).join(", ") || "—"} · @{e.telegram_username || "—"} · ID{" "}
+                  {e.telegram_id ?? "—"}
+                </span>
+                <span>
+                  Снята: {formatDt(e.taken_down_at)} по Риму{e.admin_username ? ` · @${e.admin_username}` : ""}
+                </span>
+                {e.published_at ? <span>Была опубликована: {formatDt(e.published_at)}</span> : null}
+                <span>
+                  Из канала удалено: {e.deleted_messages}
+                  {e.failed_messages > 0 ? ` · не удалось: ${e.failed_messages}` : ""}
+                  {e.open_chats > 0 ? ` · чатов: ${e.open_chats}` : ""}
+                  {e.closed_letters > 0 ? ` · писем закрыто: ${e.closed_letters}` : ""}
+                </span>
+                <span>{e.user_notified ? "Пользователь уведомлён" : "Пользователь не уведомлён"}</span>
+              </li>
+            ))}
+          </ul>
+          {takedowns.length > 0 ? (
+            <div className="admin-list-footer">
+              <p className="admin-list-footer__count">
+                Показано {takedowns.length} из {takedownsTotal}
+              </p>
+              {takedownsHasMore ? (
+                <button
+                  type="button"
+                  className="admin-btn admin-btn--primary admin-btn--block"
+                  disabled={takedownsLoadingMore || busy}
+                  onClick={() => void loadMoreTakedowns()}
+                >
+                  {takedownsLoadingMore ? "Загрузка…" : "Показать ещё"}
+                </button>
+              ) : (
+                <p className="admin-list-footer__done">Это все записи</p>
+              )}
+            </div>
+          ) : null}
+        </>
       ) : null}
 
       {tab === "complaints" ? (
