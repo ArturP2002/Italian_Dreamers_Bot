@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { guideAssets } from "../assets/backgrounds";
+import { guideAssets, guidePhotos } from "../assets/backgrounds";
 import { COVER_QUESTIONS, type Language, type MessageKey, tf, t } from "../i18n/messages";
 import {
   deleteGreetingVideo,
@@ -113,6 +113,7 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const [audioPlaying, setAudioPlaying] = useState(false);
   const [videoProgress, setVideoProgress] = useState<number | null>(null);
 
   useEffect(() => {
@@ -445,32 +446,60 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
       <WizardChrome
         language={language}
         step={2}
-        onBack={() => setPhase("gate")}
+        onBack={() => {
+          setAudioPlaying(false);
+          setPhase("gate");
+        }}
         footer={
-          <>
-            <button type="button" className="btn btn--cream btn--block" onClick={() => audioRef.current?.play()}>
-              {t(language, "guideListen")}
-            </button>
-            <a className="btn btn--ghost btn--block" style={{ textAlign: "center", borderColor: "rgba(26,21,17,0.2)", color: "var(--color-graphite)" }} href={assets.pdf} target="_blank" rel="noreferrer">
-              {t(language, "guideRead")}
-            </a>
-            <button
-              type="button"
-              className="btn btn--dark btn--block"
-              onClick={() => {
-                setError(null);
-                setStep(upcomingStep);
-                setPhase("steps");
-              }}
-            >
-              {t(language, "guideSkip")}
-            </button>
-            <audio ref={audioRef} src={assets.audio} preload="none" />
-          </>
+          <button
+            type="button"
+            className="btn btn--dark btn--block"
+            onClick={() => {
+              setAudioPlaying(false);
+              setError(null);
+              setStep(upcomingStep);
+              setPhase("steps");
+            }}
+          >
+            {t(language, "guideSkip")}
+          </button>
         }
       >
         <h2 className="wizard-title">{t(language, "guideTitle")}</h2>
         <p className="wizard-hint">{t(language, "guideBody")}</p>
+        <div className="guide-tiles">
+          <button
+            type="button"
+            className={`guide-tile${audioPlaying ? " guide-tile--active" : ""}`}
+            onClick={() => {
+              const audio = audioRef.current;
+              if (!audio) return;
+              if (audio.paused) void audio.play();
+              else audio.pause();
+            }}
+          >
+            <img className="guide-tile__img guide-tile__img--listen" src={guidePhotos.listen} alt="" />
+            <span className="guide-tile__badge" aria-hidden>
+              {audioPlaying ? "❚❚" : "▶"}
+            </span>
+            <span className="guide-tile__label">{t(language, "guideListen")}</span>
+          </button>
+          <a className="guide-tile" href={assets.pdf} target="_blank" rel="noreferrer">
+            <img className="guide-tile__img guide-tile__img--read" src={guidePhotos.read} alt="" />
+            <span className="guide-tile__badge" aria-hidden>
+              PDF
+            </span>
+            <span className="guide-tile__label">{t(language, "guideRead")}</span>
+          </a>
+        </div>
+        <audio
+          ref={audioRef}
+          src={assets.audio}
+          preload="none"
+          onPlay={() => setAudioPlaying(true)}
+          onPause={() => setAudioPlaying(false)}
+          onEnded={() => setAudioPlaying(false)}
+        />
       </WizardChrome>
     );
   }

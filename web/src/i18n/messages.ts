@@ -168,7 +168,7 @@ export const messages = {
     guideTitle: "Советы для анкеты",
     guideBody: "Хотите несколько советов, которые помогут сделать анкету классной?",
     guideListen: "Прослушать",
-    guideRead: "Прочитать PDF",
+    guideRead: "Прочитать",
     guideSkip: "Пропустить",
 
     qName: "Как вас зовут?",
@@ -412,7 +412,7 @@ export const messages = {
     guideTitle: "Consigli per il profilo",
     guideBody: "Vuoi alcuni consigli per rendere il profilo più attraente?",
     guideListen: "Ascolta",
-    guideRead: "Leggi il PDF",
+    guideRead: "Leggi",
     guideSkip: "Salta",
 
     qName: "Come ti chiami?",

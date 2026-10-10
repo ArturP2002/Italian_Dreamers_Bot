@@ -32,3 +32,8 @@ export const guideAssets = {
   ru: { pdf: "/guide/guide_women.pdf", audio: "/guide/guide_women.ogg" },
   it: { pdf: "/guide/guide_men.pdf", audio: "/guide/guide_men.ogg" },
 } as const;
+
+export const guidePhotos = {
+  listen: "/photos/guide_listen_spb_kazan_couple.jpg",
+  read: "/photos/guide_read_rome_sunset_kiss.jpg",
+} as const;
