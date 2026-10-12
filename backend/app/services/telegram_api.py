@@ -165,8 +165,12 @@ async def send_media_album(
     items: list[tuple[str, str | Path]],
     *,
     caption: str | None = None,
+    video_meta: dict[str, int] | None = None,
 ) -> dict[str, Any]:
-    """Send 2–10 photos/videos as one album; caption goes on the first item."""
+    """Send 2–10 photos/videos as one album; caption goes on the first item.
+
+    video_meta (width/height/duration) is applied to video items.
+    """
     media: list[dict[str, Any]] = []
     local_paths: dict[str, tuple[Path, str]] = {}
     for idx, (kind, source) in enumerate(items):
@@ -179,6 +183,7 @@ async def send_media_album(
             item = {"type": kind, "media": source}
         if kind == "video":
             item["supports_streaming"] = True
+            item.update(video_meta or {})
         if idx == 0 and caption:
             item["caption"] = caption
             item["parse_mode"] = "HTML"

@@ -19,7 +19,7 @@ from app.services.splash import (
     build_splash_image,
     resolve_cover_texts,
 )
-from app.services.greeting_video import video_path
+from app.services.greeting_video import video_metadata, video_path
 from app.services.telegram_api import (
     TelegramApiError,
     bot_has_main_web_app,
@@ -309,9 +309,10 @@ async def publish_profile_to_channel(
             if channel_message_id:
                 post_message_ids.append(channel_message_id)
         else:
+            video_meta = await video_metadata(greeting_video) if greeting_video else None
             try:
                 group = await send_media_album(
-                    settings, settings.channel_id, items, caption=album_caption
+                    settings, settings.channel_id, items, caption=album_caption, video_meta=video_meta
                 )
             except TelegramApiError:
                 if not greeting_video:

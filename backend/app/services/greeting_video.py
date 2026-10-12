@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import shutil
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -16,6 +18,7 @@ MEDIA_VIDEOS.mkdir(parents=True, exist_ok=True)
 # Telegram Bot API rejects multipart uploads above 50 MB.
 MAX_VIDEO_BYTES = 50 * 1024 * 1024
 FFMPEG_TIMEOUT_SEC = 180
+FFPROBE_TIMEOUT_SEC = 30
 
 VIDEO_EXTENSIONS = {
     "video/mp4": ".mp4",
@@ -43,6 +46,69 @@ def remove_video(file_id: str | None) -> None:
     path = video_path(file_id)
     if path is not None:
         path.unlink(missing_ok=True)
+
+
+@dataclass
+class VideoInfo:
+    # Display size, i.e. after applying the rotation.
+    width: int
+    height: int
+    duration: int
+    # Degrees the player must rotate the stored frames (iPhone portrait videos: 90).
+    rotation: int
+
+
+async def probe_video(path: Path) -> VideoInfo | None:
+    if shutil.which("ffprobe") is None:
+        return None
+    proc = await asyncio.create_subprocess_exec(
+        "ffprobe",
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_streams",
+        "-show_format",
+        "-of",
+        "json",
+        str(path),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    try:
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=FFPROBE_TIMEOUT_SEC)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        logger.warning("ffprobe timed out: %s", path.name)
+        return None
+    try:
+        data = json.loads(stdout or b"{}")
+        stream = (data.get("streams") or [])[0]
+        rotation_raw = (stream.get("tags") or {}).get("rotate") or next(
+            (sd["rotation"] for sd in stream.get("side_data_list") or [] if "rotation" in sd),
+            0,
+        )
+        rotation = int(float(rotation_raw)) % 360
+        width, height = int(stream["width"]), int(stream["height"])
+        if rotation in (90, 270):
+            width, height = height, width
+        duration = float(stream.get("duration") or (data.get("format") or {}).get("duration") or 0)
+    except (IndexError, KeyError, TypeError, ValueError):
+        logger.warning("Unreadable ffprobe output for %s", path.name)
+        return None
+    return VideoInfo(width=width, height=height, duration=round(duration), rotation=rotation)
+
+
+async def video_metadata(path: Path) -> dict[str, int]:
+    """Width/height/duration for Telegram, so clients lay the album tile out correctly."""
+    info = await probe_video(path)
+    if info is None:
+        return {}
+    meta = {"width": info.width, "height": info.height}
+    if info.duration:
+        meta["duration"] = info.duration
+    return meta
 
 
 async def _run_ffmpeg(args: list[str]) -> bool:
@@ -75,6 +141,8 @@ async def normalize_to_mp4(src: Path) -> Path:
         return src
 
     dest = src.with_name(f"{uuid.uuid4().hex}.mp4")
+    info = await probe_video(src)
+    rotated = bool(info and info.rotation)
     remux = ["-i", str(src), "-c", "copy", "-movflags", "+faststart", str(dest)]
     transcode = [
         "-i",
@@ -97,7 +165,10 @@ async def normalize_to_mp4(src: Path) -> Path:
         "+faststart",
         str(dest),
     ]
-    for args in (remux, transcode):
+    # A plain remux keeps the rotation flag, which Telegram mobile ignores in albums;
+    # re-encoding bakes the rotation into the frames (ffmpeg autorotates by default).
+    attempts = (transcode,) if rotated else (remux, transcode)
+    for args in attempts:
         if await _run_ffmpeg(args) and dest.exists() and dest.stat().st_size > 0:
             if dest.stat().st_size <= MAX_VIDEO_BYTES:
                 src.unlink(missing_ok=True)
