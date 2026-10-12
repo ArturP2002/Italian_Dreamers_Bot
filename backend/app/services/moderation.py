@@ -334,7 +334,7 @@ async def admin_stats(session: AsyncSession) -> dict:
                     Payment.product.in_(
                         [
                             PaymentProduct.MESSAGE_CREDIT.value,
-                            PaymentProduct.MESSAGE_PACK_9.value,
+                            PaymentProduct.MESSAGE_PACK_10.value,
                         ]
                     ),
                     Payment.status == PaymentStatus.COMPLETED.value,

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,13 +31,20 @@ class Settings(BaseSettings):
     environment: str = Field(alias="ENVIRONMENT", default="development")
     app_timezone: str = Field(alias="APP_TIMEZONE", default="Europe/Rome")
 
-    # Prices (Stars) — placeholders from ТЗ
-    price_message_credit_stars: int = Field(alias="PRICE_MESSAGE_CREDIT_STARS", default=258)
-    price_message_pack_9_stars: int = Field(alias="PRICE_MESSAGE_PACK_9_STARS", default=1920)
-    message_pack_size: int = Field(alias="MESSAGE_PACK_SIZE", default=9)
+    # Prices (Stars)
+    price_message_credit_stars: int = Field(alias="PRICE_MESSAGE_CREDIT_STARS", default=100)
+    # The old variable name is still accepted so a not-yet-updated .env keeps working.
+    price_message_pack_10_stars: int = Field(
+        validation_alias=AliasChoices("PRICE_MESSAGE_PACK_10_STARS", "PRICE_MESSAGE_PACK_9_STARS"),
+        default=500,
+    )
+    message_pack_size: int = Field(alias="MESSAGE_PACK_SIZE", default=10)
     referral_bonus_credits: int = Field(alias="REFERRAL_BONUS_CREDITS", default=1)
-    price_profile_publish_stars: int = Field(alias="PRICE_PROFILE_PUBLISH_STARS", default=3000)
-    price_ad_slot_stars: int = Field(alias="PRICE_AD_SLOT_STARS", default=9000)
+    price_profile_publish_stars: int = Field(alias="PRICE_PROFILE_PUBLISH_STARS", default=1000)
+    price_ad_slot_stars: int = Field(alias="PRICE_AD_SLOT_STARS", default=1000)
+
+    # Telegram username (without @) shown by /support and /paysupport.
+    support_username: str = Field(alias="SUPPORT_USERNAME", default="")
 
     # Rate limits
     rate_contact_per_hour: int = Field(alias="RATE_CONTACT_PER_HOUR", default=5)

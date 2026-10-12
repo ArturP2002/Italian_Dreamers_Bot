@@ -59,8 +59,8 @@ export function CreditsScreen({ language, onCreditsChange }: Props) {
           onClick={() => void onBuy(true)}
         >
           {tf(language, "buyPack", {
-            size: config?.prices.message_pack_size ?? 9,
-            stars: config?.prices.message_pack_9_stars ?? "—",
+            size: config?.prices.message_pack_size ?? 10,
+            stars: config?.prices.message_pack_10_stars ?? "—",
           })}
         </button>
       </div>

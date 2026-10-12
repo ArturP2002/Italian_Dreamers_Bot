@@ -13,7 +13,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
 from app.config import get_settings
-from handlers import payments, start
+from handlers import info, payments, start
 
 
 async def main() -> None:
@@ -27,6 +27,12 @@ async def main() -> None:
     dispatcher = Dispatcher()
     dispatcher.include_router(start.router)
     dispatcher.include_router(payments.router)
+    dispatcher.include_router(info.router)
+
+    try:
+        await info.set_bot_commands(bot)
+    except Exception:
+        logging.exception("Failed to set bot commands")
 
     await dispatcher.start_polling(bot)
 

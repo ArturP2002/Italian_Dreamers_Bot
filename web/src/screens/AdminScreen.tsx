@@ -242,7 +242,7 @@ function familyLineRu(p: AdminProfileDetail): string {
 function paymentProductRu(product: string): string {
   const map: Record<string, string> = {
     message_credit: "кредит на письмо",
-    message_pack_9: "пакет из 9 писем",
+    message_pack_10: "пакет из 10 писем",
     profile_publish: "публикация анкеты",
     ad_slot: "реклама",
   };

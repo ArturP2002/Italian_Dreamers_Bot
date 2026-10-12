@@ -201,7 +201,7 @@ export type AdminComplaint = {
 export type PublicConfig = {
   prices: {
     message_credit_stars: number;
-    message_pack_9_stars: number;
+    message_pack_10_stars: number;
     message_pack_size: number;
     profile_publish_stars: number;
     ad_slot_stars: number;

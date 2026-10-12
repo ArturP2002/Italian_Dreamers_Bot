@@ -38,7 +38,7 @@ async def on_pre_checkout(query: PreCheckoutQuery) -> None:
         allowed = {
             PaymentProduct.PROFILE_PUBLISH.value,
             PaymentProduct.MESSAGE_CREDIT.value,
-            PaymentProduct.MESSAGE_PACK_9.value,
+            PaymentProduct.MESSAGE_PACK_10.value,
             PaymentProduct.AD_SLOT.value,
         }
         if payment.product not in allowed:
@@ -76,7 +76,7 @@ async def on_successful_payment(message: Message) -> None:
             )
         elif payment.product in {
             PaymentProduct.MESSAGE_CREDIT.value,
-            PaymentProduct.MESSAGE_PACK_9.value,
+            PaymentProduct.MESSAGE_PACK_10.value,
         }:
             await complete_credit_payment(
                 session,

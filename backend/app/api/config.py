@@ -13,7 +13,7 @@ async def public_config(settings: Settings = Depends(get_settings)) -> dict:
     return {
         "prices": {
             "message_credit_stars": settings.price_message_credit_stars,
-            "message_pack_9_stars": settings.price_message_pack_9_stars,
+            "message_pack_10_stars": settings.price_message_pack_10_stars,
             "message_pack_size": settings.message_pack_size,
             "profile_publish_stars": settings.price_profile_publish_stars,
             "ad_slot_stars": settings.price_ad_slot_stars,

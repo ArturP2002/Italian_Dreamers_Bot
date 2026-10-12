@@ -220,8 +220,8 @@ async def create_credit_payment(
     pack: bool = False,
 ) -> Payment:
     if pack:
-        product = PaymentProduct.MESSAGE_PACK_9.value
-        stars = settings.price_message_pack_9_stars
+        product = PaymentProduct.MESSAGE_PACK_10.value
+        stars = settings.price_message_pack_10_stars
         make_payload = make_pack_payload
     else:
         product = PaymentProduct.MESSAGE_CREDIT.value
@@ -251,10 +251,10 @@ async def send_credit_invoice(
     payment: Payment,
 ) -> None:
     lang = user.language_code if user.language_code in {"ru", "it"} else "ru"
-    is_pack = payment.product == PaymentProduct.MESSAGE_PACK_9.value
+    is_pack = payment.product == PaymentProduct.MESSAGE_PACK_10.value
     if lang == "it":
         if is_pack:
-            title = "Pacchetto 9 messaggi"
+            title = f"Pacchetto {settings.message_pack_size} messaggi"
             description = (
                 f"Pacchetto da {settings.message_pack_size} crediti messaggio. "
                 "I crediti non scadono."
@@ -264,7 +264,7 @@ async def send_credit_invoice(
             description = "Sblocca la chat con chi ti ha risposto (1 credito)."
     else:
         if is_pack:
-            title = "Пакет 9 сообщений"
+            title = f"Пакет {settings.message_pack_size} сообщений"
             description = (
                 f"Пакет из {settings.message_pack_size} кредитов сообщений. "
                 "Кредиты не сгорают."
@@ -339,7 +339,7 @@ async def complete_credit_payment(
     if payment.status == PaymentStatus.COMPLETED.value:
         return user
 
-    is_pack = payment.product == PaymentProduct.MESSAGE_PACK_9.value
+    is_pack = payment.product == PaymentProduct.MESSAGE_PACK_10.value
     delta = settings.message_pack_size if is_pack else 1
 
     payment.status = PaymentStatus.COMPLETED.value
@@ -358,7 +358,7 @@ async def complete_credit_payment(
             balance_after=user.message_credits,
             payment_id=payment.id,
             message_request_id=payment.related_message_request_id,
-            note="pack_9" if is_pack else "credit_1",
+            note="pack_10" if is_pack else "credit_1",
         )
     )
     await session.commit()

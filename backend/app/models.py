@@ -73,7 +73,7 @@ class MessageRequestStatus(StrEnum):
 
 class PaymentProduct(StrEnum):
     MESSAGE_CREDIT = "message_credit"
-    MESSAGE_PACK_9 = "message_pack_9"
+    MESSAGE_PACK_10 = "message_pack_10"
     PROFILE_PUBLISH = "profile_publish"
     AD_SLOT = "ad_slot"
 
