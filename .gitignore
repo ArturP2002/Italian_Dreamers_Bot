@@ -28,3 +28,13 @@ web/dist/
 # Docker / logs
 *.log
 pgdata/
+
+# Planning / office docs (not part of the app)
+*.xlsx
+*.xls
+*.docx
+*.doc
+*.pptx
+*.ppt
+*.odt
+*.ods

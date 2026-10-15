@@ -21,13 +21,20 @@ logger = logging.getLogger(__name__)
 router = Router(name="start")
 
 
-def webapp_keyboard(url: str, language: str = "ru") -> InlineKeyboardMarkup:
+def webapp_keyboard(
+    url: str,
+    language: str = "ru",
+    *,
+    channel_url: str | None = None,
+) -> InlineKeyboardMarkup:
     label = "Открыть Italian Dreamers" if language == "ru" else "Apri Italian Dreamers"
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=label, web_app=WebAppInfo(url=url))],
-        ]
-    )
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text=label, web_app=WebAppInfo(url=url))],
+    ]
+    if channel_url:
+        channel_label = "Перейти в канал" if language == "ru" else "Vai al canale"
+        rows.append([InlineKeyboardButton(text=channel_label, url=channel_url)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def _with_startapp(url: str, param: str) -> str:
@@ -110,24 +117,34 @@ async def cmd_start(message: Message, command: CommandObject) -> None:
         await message.answer(text, reply_markup=webapp_keyboard(settings.webapp_url, language=lang))
         return
 
+    channel_url = settings.channel_url.strip() or "https://t.me/italiandreamers"
     if lang == "it":
         text = (
             "<b>Italian Dreamers</b>\n\n"
-            "Benvenuto. Tutto avviene nell'app: profilo, lettere, chat.\n"
-            "Premendo «Avvia» attivi anche le notifiche push del bot.\n"
-            "Tocca il pulsante qui sotto per entrare."
+            "Questo è il bot del canale Italian Dreamers.\n"
+            "Profilo → verifica → pagamento → pubblicazione sul canale e nell'app.\n\n"
+            "Mentre aspetti la moderazione, dai un'occhiata al canale — la community "
+            f"è già attiva:\n{channel_url}\n\n"
+            "Tocca il pulsante qui sotto per aprire l'app."
         )
     else:
         text = (
             "<b>Italian Dreamers</b>\n\n"
-            "Добро пожаловать. Анкета, письма и чат — в Mini App.\n"
-            "Нажав «Начать», вы также включаете push-уведомления от бота.\n"
-            "Нажмите кнопку ниже, чтобы войти."
+            "Это бот канала Italian Dreamers.\n"
+            "Анкета → проверка → оплата → публикация в канале и в приложении.\n\n"
+            "Пока ждёте модерацию — загляните в канал, там уже живое комьюнити:\n"
+            f"{channel_url}\n\n"
+            "Нажмите кнопку ниже, чтобы открыть приложение."
         )
 
     await message.answer(
         text,
-        reply_markup=webapp_keyboard(settings.webapp_url, language=lang),
+        reply_markup=webapp_keyboard(
+            settings.webapp_url,
+            language=lang,
+            channel_url=channel_url,
+        ),
+        disable_web_page_preview=True,
     )
 
 

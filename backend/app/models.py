@@ -196,6 +196,10 @@ class Profile(Base):
     greeting_video_file_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     moderation_feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Set after successful /broadcast_moderation so the same waiting profile is not messaged twice.
+    moderation_waiting_notified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     channel_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)

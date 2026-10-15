@@ -13,7 +13,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
 from app.config import get_settings
-from handlers import info, payments, start
+from handlers import broadcast, info, payments, start
 
 
 async def main() -> None:
@@ -26,6 +26,7 @@ async def main() -> None:
     )
     dispatcher = Dispatcher()
     dispatcher.include_router(start.router)
+    dispatcher.include_router(broadcast.router)
     dispatcher.include_router(payments.router)
     dispatcher.include_router(info.router)
 

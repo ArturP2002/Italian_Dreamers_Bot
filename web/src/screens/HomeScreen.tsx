@@ -4,7 +4,7 @@ import { homeAssets } from "../assets/backgrounds";
 import { TricolorHeart } from "../components/TricolorHeart";
 import { LanguageToggle } from "../components/LanguageToggle";
 import { greetingKey, type Language, t } from "../i18n/messages";
-import { fetchInbox, requestPublishInvoice, type MeUser } from "../lib/api";
+import { fetchConfig, fetchInbox, requestPublishInvoice, type MeUser } from "../lib/api";
 
 type Props = {
   language: Language;
@@ -41,6 +41,7 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
   const [payBusy, setPayBusy] = useState(false);
   const [payMsg, setPayMsg] = useState<string | null>(null);
   const [pendingLetters, setPendingLetters] = useState(0);
+  const [channelUrl, setChannelUrl] = useState("https://t.me/italiandreamers");
 
   const primaryIsCreate = isDraft || isRejected || !hasProfile;
 
@@ -49,6 +50,13 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
       setPendingLetters(data?.pending_incoming ?? 0);
     });
   }, [me?.id]);
+
+  useEffect(() => {
+    void fetchConfig().then((cfg) => {
+      const url = cfg?.channel_url?.trim();
+      if (url) setChannelUrl(url);
+    });
+  }, []);
 
   const onPay = async () => {
     setPayBusy(true);
@@ -77,6 +85,13 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
       </header>
 
       <h1 className="home-greeting">{greeting}</h1>
+
+      <p className="home-meta">{t(language, "homeHowItWorks")}</p>
+      <p className="home-meta">
+        <a className="home-link" href={channelUrl} target="_blank" rel="noreferrer">
+          {t(language, "homeOpenChannel")}
+        </a>
+      </p>
 
       {statusText ? <div className="home-status">{statusText}</div> : null}
 

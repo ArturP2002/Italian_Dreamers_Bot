@@ -26,4 +26,5 @@ async def public_config(settings: Settings = Depends(get_settings)) -> dict:
         },
         "timezone": settings.app_timezone,
         "bot_username": bot_username,
+        "channel_url": settings.channel_url,
     }

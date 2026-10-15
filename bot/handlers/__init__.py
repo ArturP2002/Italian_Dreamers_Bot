@@ -1,3 +1,3 @@
-from handlers import payments, start
+from handlers import broadcast, payments, start
 
-__all__ = ["payments", "start"]
+__all__ = ["broadcast", "payments", "start"]
