@@ -14,6 +14,13 @@ export type MeUser = {
   is_soft_banned: boolean;
   profile_status: string | null;
   profile_id: number | null;
+  has_username?: boolean;
+  bot_write_access?: boolean;
+  has_unlimited?: boolean;
+  unlimited_until?: string | null;
+  verification_status?: string | null;
+  is_top?: boolean;
+  top_until?: string | null;
 };
 
 export type ProfilePhoto = {
@@ -64,6 +71,7 @@ export type AdminProfileListItem = {
   city: string;
   country: string;
   telegram_username: string | null;
+  has_username?: boolean;
   user_telegram_id: number | null;
   user_id: number;
   moderation_feedback: string | null;
@@ -123,6 +131,7 @@ export type AdminPayment = {
 };
 
 export type AdminStats = {
+  period?: string;
   users_total: number;
   users_blocked: number;
   users_soft_banned?: number;
@@ -145,6 +154,88 @@ export type AdminStats = {
   ads_queued?: number;
   ads_active?: number;
   ads_expired?: number;
+  funnel_submitted?: number;
+  funnel_approved?: number;
+  funnel_paid?: number;
+  funnel_queued?: number;
+  funnel_published?: number;
+  letters_new?: number;
+  letters_replied_period?: number;
+  letters_unlocked_period?: number;
+};
+
+export type CatalogCard = {
+  id: number;
+  name: string;
+  age: number;
+  city: string;
+  country: string;
+  gender: string | null;
+  photo_urls: string[];
+  already_written: boolean;
+  active_request_id: number | null;
+  verified: boolean;
+  liked?: boolean;
+  matched?: boolean;
+  is_top?: boolean;
+  status: string;
+};
+
+export type CatalogPage = {
+  items: CatalogCard[];
+  next_cursor: string | null;
+  gender: string | null;
+};
+
+export type CatalogProfile = CatalogCard & {
+  height_cm: number;
+  profession: string;
+  hobbies: string;
+  about: string;
+  desired_partner: string;
+  age_min: number;
+  age_max: number;
+  has_children: boolean;
+  wants_children: string;
+  marital_status: string;
+  is_mine: boolean;
+  published_at: string | null;
+};
+
+export type AdminRejectPreset = { id: string; text: string };
+
+export type AdminCreditEntry = {
+  id: number;
+  entry_type: string;
+  delta: number;
+  balance_after: number;
+  note: string | null;
+  created_at: string;
+};
+
+export type AdminSlotProfile = {
+  id: number;
+  name: string;
+  age: number;
+  gender: string | null;
+  status: string;
+  photo_url: string | null;
+};
+
+export type AdminSlot = {
+  id: number;
+  slot_date: string;
+  slot_index: number;
+  time_local: string;
+  gender: string;
+  profile_id: number | null;
+  scheduled_at: string | null;
+  profile: AdminSlotProfile | null;
+};
+
+export type AdminSlotDay = {
+  date: string;
+  items: AdminSlot[];
 };
 
 export type AdRequestItem = {
@@ -205,6 +296,8 @@ export type PublicConfig = {
     message_pack_size: number;
     profile_publish_stars: number;
     ad_slot_stars: number;
+    unlimited_sub_stars?: number;
+    catalog_top_stars?: number;
   };
   limits: Record<string, number>;
   timezone: string;
@@ -242,6 +335,7 @@ export type MessageRequestItem = {
   can_unlock: boolean;
   can_chat: boolean;
   message_credits: number;
+  has_unlimited?: boolean;
 };
 
 export type InboxResponse = {
@@ -374,6 +468,30 @@ export async function patchGender(gender: "male" | "female"): Promise<MeUser | n
   });
 }
 
+export async function patchPlatform(platform: string): Promise<MeUser | null> {
+  return apiFetch<MeUser>("/api/me/platform", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ platform }),
+  });
+}
+
+export async function patchWriteAccess(granted: boolean): Promise<MeUser | null> {
+  return apiFetch<MeUser>("/api/me/write-access", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ granted }),
+  });
+}
+
+export async function checkUsername(): Promise<{
+  ok: boolean;
+  username: string | null;
+  message: string;
+} | null> {
+  return apiFetch("/api/me/username-check", { method: "POST" });
+}
+
 export async function fetchConfig(): Promise<PublicConfig | null> {
   return apiFetch<PublicConfig>("/api/config");
 }
@@ -474,8 +592,59 @@ async function apiFetchJsonOrThrow<T>(path: string, init?: RequestInit): Promise
   return (await res.json()) as T;
 }
 
-export async function adminFetchStats(): Promise<AdminStats | null> {
-  return apiFetch<AdminStats>("/api/admin/stats");
+export async function adminFetchStats(period?: string): Promise<AdminStats | null> {
+  const q = period ? `?period=${encodeURIComponent(period)}` : "";
+  return apiFetch<AdminStats>(`/api/admin/stats${q}`);
+}
+
+export async function fetchCatalog(params: {
+  gender?: string | null;
+  ageMin?: number | null;
+  ageMax?: number | null;
+  verified?: boolean;
+  cursor?: string | null;
+}): Promise<CatalogPage | null> {
+  const search = new URLSearchParams();
+  if (params.gender) search.set("gender", params.gender);
+  if (params.ageMin != null) search.set("age_min", String(params.ageMin));
+  if (params.ageMax != null) search.set("age_max", String(params.ageMax));
+  if (params.verified) search.set("verified", "true");
+  if (params.cursor) search.set("cursor", params.cursor);
+  const q = search.toString() ? `?${search}` : "";
+  return apiFetch<CatalogPage>(`/api/catalog${q}`);
+}
+
+export async function fetchCatalogProfile(id: number): Promise<CatalogProfile | null> {
+  return apiFetch<CatalogProfile>(`/api/catalog/${id}`);
+}
+
+export async function adminFetchRejectPresets(): Promise<AdminRejectPreset[]> {
+  return (await apiFetch<AdminRejectPreset[]>("/api/admin/reject-presets")) ?? [];
+}
+
+export async function adminFetchCredits(userId: number): Promise<AdminCreditEntry[]> {
+  return (await apiFetch<AdminCreditEntry[]>(`/api/admin/users/${userId}/credits`)) ?? [];
+}
+
+export async function adminFetchSlots(day?: string): Promise<AdminSlotDay | null> {
+  const q = day ? `?day=${encodeURIComponent(day)}` : "";
+  return apiFetch<AdminSlotDay>(`/api/admin/slots${q}`);
+}
+
+export async function adminAssignSlot(slotId: number, profileId: number | null): Promise<AdminSlotDay> {
+  return apiFetchJsonOrThrow(`/api/admin/slots/${slotId}/assign`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ profile_id: profileId }),
+  });
+}
+
+export async function adminSwapSlots(slotId: number, otherSlotId: number): Promise<AdminSlotDay> {
+  return apiFetchJsonOrThrow(`/api/admin/slots/${slotId}/swap`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ other_slot_id: otherSlotId }),
+  });
 }
 
 export type AdminProfileListPage = {
@@ -488,12 +657,28 @@ export type AdminProfileListPage = {
 
 export async function adminFetchProfiles(
   status?: string,
-  opts?: { limit?: number; offset?: number },
+  opts?: {
+    limit?: number;
+    offset?: number;
+    gender?: string;
+    ageMin?: number | null;
+    ageMax?: number | null;
+    hasUsername?: boolean | null;
+    dateFrom?: string;
+    dateTo?: string;
+  },
 ): Promise<AdminProfileListPage> {
   const params = new URLSearchParams();
   if (status) params.set("status", status);
   if (opts?.limit != null) params.set("limit", String(opts.limit));
   if (opts?.offset != null) params.set("offset", String(opts.offset));
+  if (opts?.gender) params.set("gender", opts.gender);
+  if (opts?.ageMin != null) params.set("age_min", String(opts.ageMin));
+  if (opts?.ageMax != null) params.set("age_max", String(opts.ageMax));
+  if (opts?.hasUsername === true) params.set("has_username", "true");
+  if (opts?.hasUsername === false) params.set("has_username", "false");
+  if (opts?.dateFrom) params.set("date_from", opts.dateFrom);
+  if (opts?.dateTo) params.set("date_to", opts.dateTo);
   const q = params.toString() ? `?${params}` : "";
   const data = await apiFetch<AdminProfileListPage | AdminProfileListItem[]>(`/api/admin/profiles${q}`);
   // Backward-compatible if an old API still returns a bare array.
@@ -665,12 +850,14 @@ export async function createLetter(payload: {
   senderName?: string;
   senderAge?: number;
   photo?: File | null;
+  photoIsMine?: boolean;
 }): Promise<MessageRequestItem> {
   const body = new FormData();
   body.append("profile_id", String(payload.profileId));
   body.append("text", payload.text);
   if (payload.senderName) body.append("sender_name", payload.senderName);
   if (payload.senderAge) body.append("sender_age", String(payload.senderAge));
+  body.append("photo_is_mine", payload.photoIsMine ? "true" : "false");
   if (payload.photo) body.append("photo", payload.photo);
   return apiFetchJsonOrThrow<MessageRequestItem>("/api/messages", { method: "POST", body });
 }
@@ -811,4 +998,136 @@ export async function adminResolveComplaint(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status, admin_note: adminNote }),
   });
+}
+
+export async function toggleCatalogLike(profileId: number): Promise<{ liked: boolean; matched: boolean }> {
+  return apiFetchJsonOrThrow(`/api/catalog/${profileId}/like`, { method: "POST" });
+}
+
+export async function fetchLikes(kind: "sent" | "received"): Promise<{ items: CatalogCard[] }> {
+  return (await apiFetch<{ items: CatalogCard[] }>(`/api/likes?kind=${kind}`)) ?? { items: [] };
+}
+
+export async function buyUnlimited(): Promise<{ ok: boolean; already?: boolean; stars?: number }> {
+  return apiFetchJsonOrThrow("/api/me/unlimited", { method: "POST" });
+}
+
+export async function cancelUnlimited(): Promise<{ ok: boolean; expires_at?: string }> {
+  return apiFetchJsonOrThrow("/api/me/unlimited/cancel", { method: "POST" });
+}
+
+export async function buyCatalogTop(): Promise<{ ok: boolean; already?: boolean; included?: boolean; stars?: number }> {
+  return apiFetchJsonOrThrow("/api/me/catalog-top", { method: "POST" });
+}
+
+export async function uploadVerificationSelfie(file: File): Promise<{ ok: boolean; verification_status: string }> {
+  const body = new FormData();
+  body.append("file", file);
+  return apiFetchJsonOrThrow("/api/me/verification", { method: "POST", body });
+}
+
+export async function claimLegacyInvite(token: string): Promise<{ ok: boolean; id: number; name: string }> {
+  return apiFetchJsonOrThrow(`/api/me/legacy/${encodeURIComponent(token)}`, { method: "POST" });
+}
+
+export type AdminVerification = {
+  id: number;
+  name: string;
+  age: number;
+  city: string;
+  status: string;
+  verification_status: string;
+  photo_url: string | null;
+  user_telegram_id: number | null;
+  username: string | null;
+};
+
+export type AdminLegacy = {
+  id: number;
+  name: string;
+  gender: string | null;
+  city: string | null;
+  age: number | null;
+  channel_message_id: number | null;
+  telegram_username: string | null;
+  notes: string | null;
+  status: string;
+  invite_token: string | null;
+  invited_at: string | null;
+  activated_user_id: number | null;
+  created_at: string;
+};
+
+export type AdminComment = {
+  id: number;
+  telegram_user_id: number;
+  username: string | null;
+  text: string;
+  decision: string;
+  reason: string | null;
+  created_at: string;
+};
+
+export type AdminWeeklyReport = {
+  id: number;
+  period_start: string;
+  period_end: string;
+  payload: Record<string, number>;
+  sent_at: string | null;
+};
+
+export async function adminFetchVerifications(): Promise<AdminVerification[]> {
+  return (await apiFetch<AdminVerification[]>("/api/admin/verifications")) ?? [];
+}
+
+export async function adminDecideVerification(
+  id: number,
+  approved: boolean,
+  feedback?: string,
+): Promise<AdminVerification> {
+  return apiFetchJsonOrThrow(`/api/admin/verifications/${id}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ approved, feedback }),
+  });
+}
+
+export async function adminFetchLegacy(status?: string): Promise<AdminLegacy[]> {
+  const q = status ? `?status=${encodeURIComponent(status)}` : "";
+  return (await apiFetch<AdminLegacy[]>(`/api/admin/legacy${q}`)) ?? [];
+}
+
+export async function adminCreateLegacy(body: {
+  name: string;
+  gender?: string;
+  city?: string;
+  age?: number | null;
+  telegram_username?: string;
+  notes?: string;
+}): Promise<AdminLegacy> {
+  return apiFetchJsonOrThrow("/api/admin/legacy", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function adminInviteLegacy(id: number): Promise<AdminLegacy> {
+  return apiFetchJsonOrThrow(`/api/admin/legacy/${id}/invite`, { method: "POST" });
+}
+
+export async function adminSkipLegacy(id: number): Promise<AdminLegacy> {
+  return apiFetchJsonOrThrow(`/api/admin/legacy/${id}/skip`, { method: "POST" });
+}
+
+export async function adminFetchComments(decision = "delete"): Promise<AdminComment[]> {
+  return (await apiFetch<AdminComment[]>(`/api/admin/comments?decision=${encodeURIComponent(decision)}`)) ?? [];
+}
+
+export async function adminMarkCommentFp(id: number): Promise<AdminComment> {
+  return apiFetchJsonOrThrow(`/api/admin/comments/${id}/false-positive`, { method: "POST" });
+}
+
+export async function adminFetchReports(): Promise<AdminWeeklyReport[]> {
+  return (await apiFetch<AdminWeeklyReport[]>("/api/admin/reports")) ?? [];
 }

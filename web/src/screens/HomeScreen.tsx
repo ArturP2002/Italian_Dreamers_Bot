@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { homeAssets } from "../assets/backgrounds";
 import { TricolorHeart } from "../components/TricolorHeart";
 import { LanguageToggle } from "../components/LanguageToggle";
-import { greetingKey, type Language, t } from "../i18n/messages";
+import { greetingKey, type Language, t, tf } from "../i18n/messages";
 import { fetchConfig, fetchInbox, requestPublishInvoice, type MeUser } from "../lib/api";
 
 type Props = {
@@ -141,6 +141,11 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
       )}
 
       <div className="home-grid">
+        <Link to="/catalog" className="home-tile">
+          <img className="home-tile__bg" src={homeAssets.matches} alt="" />
+          <div className="home-tile__veil" />
+          <span className="home-tile__label">{t(language, "homeCatalog")}</span>
+        </Link>
         {!primaryIsCreate ? (
           <Link to="/profile" className="home-tile">
             <img className="home-tile__bg" src={homeAssets.profile} alt="" />
@@ -156,6 +161,11 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
             <span className="home-tile__label">{t(language, "homeLettersTitle")}</span>
           </Link>
         )}
+        <Link to="/likes" className="home-tile">
+          <img className="home-tile__bg" src={homeAssets.matches} alt="" />
+          <div className="home-tile__veil" />
+          <span className="home-tile__label">{t(language, "homeLikes")}</span>
+        </Link>
         <Link to="/credits" className="home-tile">
           <img className="home-tile__bg" src={homeAssets.credits} alt="" />
           <div className="home-tile__veil" />
@@ -164,6 +174,20 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
           </span>
         </Link>
       </div>
+      {hasProfile && status !== "draft" && me?.verification_status !== "verified" ? (
+        <p className="home-meta">
+          <Link className="home-link" to="/verify">
+            {t(language, "homeVerify")}
+          </Link>
+        </p>
+      ) : null}
+      {me?.has_unlimited && me.unlimited_until ? (
+        <p className="home-meta">
+          {tf(language, "unlimitedActive", {
+            date: new Date(me.unlimited_until).toLocaleDateString(),
+          })}
+        </p>
+      ) : null}
 
       <p className="home-meta">
         <Link className="home-link" to="/referral">

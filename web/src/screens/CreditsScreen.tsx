@@ -1,19 +1,32 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { type Language, t, tf } from "../i18n/messages";
-import { buyMessageCredits, fetchConfig, fetchMe, type PublicConfig } from "../lib/api";
+import {
+  buyCatalogTop,
+  buyMessageCredits,
+  buyUnlimited,
+  cancelUnlimited,
+  fetchConfig,
+  fetchMe,
+  type MeUser,
+  type PublicConfig,
+} from "../lib/api";
 
 type Props = { language: Language; onCreditsChange?: () => void };
 
 export function CreditsScreen({ language, onCreditsChange }: Props) {
   const [credits, setCredits] = useState(0);
+  const [me, setMe] = useState<MeUser | null>(null);
   const [config, setConfig] = useState<PublicConfig | null>(null);
   const [busy, setBusy] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    void fetchMe().then((me) => setCredits(me?.message_credits ?? 0));
+    void fetchMe().then((user) => {
+      setMe(user);
+      setCredits(user?.message_credits ?? 0);
+    });
     void fetchConfig().then(setConfig);
   }, []);
 
@@ -63,6 +76,57 @@ export function CreditsScreen({ language, onCreditsChange }: Props) {
             stars: config?.prices.message_pack_10_stars ?? "—",
           })}
         </button>
+        {me?.has_unlimited ? (
+          <>
+            <p className="home-meta">
+              {tf(language, "unlimitedActive", {
+                date: me.unlimited_until ? new Date(me.unlimited_until).toLocaleDateString() : "—",
+              })}
+            </p>
+            <button
+              type="button"
+              className="btn btn--block btn--ghost"
+              disabled={busy}
+              onClick={() => {
+                void cancelUnlimited().then(() => setInfo(t(language, "invoiceSent")));
+              }}
+            >
+              {t(language, "unlimitedCancel")}
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="btn btn--block btn--dark"
+            disabled={busy}
+            onClick={() => {
+              setBusy(true);
+              void buyUnlimited()
+                .then((res) => setInfo(res.already ? tf(language, "unlimitedActive", { date: "—" }) : t(language, "invoiceSent")))
+                .catch(() => setError(t(language, "errorGeneric")))
+                .finally(() => setBusy(false));
+            }}
+          >
+            {tf(language, "unlimitedBuy", { stars: config?.prices.unlimited_sub_stars ?? 1000 })}
+          </button>
+        )}
+        {!me?.has_unlimited ? (
+          <button
+            type="button"
+            className="btn btn--block btn--ghost"
+            disabled={busy}
+            onClick={() => {
+              setBusy(true);
+              void buyCatalogTop()
+                .then(() => setInfo(t(language, "invoiceSent")))
+                .catch(() => setError(t(language, "errorGeneric")))
+                .finally(() => setBusy(false));
+            }}
+          >
+            {tf(language, "catalogTopBuy", { stars: config?.prices.catalog_top_stars ?? 1000 })}
+          </button>
+        ) : null}
+        <p className="home-meta">{t(language, "unlimitedHint")}</p>
       </div>
 
       {info ? <p className="home-meta">{info}</p> : null}

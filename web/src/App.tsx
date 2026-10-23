@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { type Language, loadLanguage, saveLanguage } from "./i18n/messages";
-import { claimReferral, fetchMe, patchLanguage, type MeUser } from "./lib/api";
+import { claimLegacyInvite, claimReferral, fetchMe, patchLanguage, type MeUser } from "./lib/api";
 import { AdFormScreen } from "./screens/AdFormScreen";
 import { AdminScreen } from "./screens/AdminScreen";
+import { CatalogProfileScreen } from "./screens/CatalogProfileScreen";
+import { CatalogScreen } from "./screens/CatalogScreen";
 import { ChatScreen } from "./screens/ChatScreen";
 import { CreditsScreen } from "./screens/CreditsScreen";
 import { HomeScreen } from "./screens/HomeScreen";
@@ -13,6 +15,8 @@ import { MessageCardScreen } from "./screens/MessageCardScreen";
 import { ProfileWizard } from "./screens/ProfileWizard";
 import { ReferralScreen } from "./screens/ReferralScreen";
 import { SupportScreen } from "./screens/SupportScreen";
+import { LikesScreen } from "./screens/LikesScreen";
+import { VerifyScreen } from "./screens/VerifyScreen";
 import { WriteLetterScreen } from "./screens/WriteLetterScreen";
 
 const BOOT_MIN_MS = 1200;
@@ -45,21 +49,6 @@ function AdminGate({ language, me }: { language: Language; me: MeUser | null }) 
     return <Navigate to="/" replace />;
   }
   return <AdminScreen language={language} />;
-}
-
-function SoftBanGate({
-  me,
-  language,
-  children,
-}: {
-  me: MeUser | null;
-  language: Language;
-  children: ReactNode;
-}) {
-  if (me?.is_soft_banned) {
-    return <SupportScreen language={language} me={me} />;
-  }
-  return <>{children}</>;
 }
 
 export default function App() {
@@ -159,6 +148,19 @@ export default function App() {
         navigate("/ads", { replace: true });
       } else if (param === "admin") {
         navigate("/admin", { replace: true });
+      } else if (param.startsWith("legacy_")) {
+        const token = param.slice("legacy_".length);
+        if (token) {
+          try {
+            await claimLegacyInvite(token);
+          } catch {
+            /* invalid or already taken */
+          }
+          navigate("/profile", { replace: true });
+        }
+      } else if (param.startsWith("catalog_")) {
+        const id = Number(param.slice("catalog_".length));
+        if (Number.isFinite(id) && id > 0) navigate(`/catalog/${id}`, { replace: true });
       }
       setDeepLinkHandled(true);
     })();
@@ -200,6 +202,13 @@ export default function App() {
           element={<HomeScreen language={language} me={me} onLanguageChange={handleLanguageChange} />}
         />
         <Route path="/support" element={<SupportScreen language={language} me={me} />} />
+        <Route path="/catalog" element={<CatalogScreen language={language} />} />
+        <Route path="/catalog/:id" element={<CatalogProfileScreen language={language} />} />
+        <Route path="/likes" element={<LikesScreen language={language} />} />
+        <Route
+          path="/verify"
+          element={<VerifyScreen language={language} onRefresh={() => void refreshMe()} />}
+        />
         <Route path="/inbox" element={<InboxScreen language={language} />} />
         <Route
           path="/inbox/:id"
@@ -207,14 +216,7 @@ export default function App() {
             <MessageCardScreen language={language} onCreditsChange={() => void refreshMe()} />
           }
         />
-        <Route
-          path="/write/:profileId"
-          element={
-            <SoftBanGate me={me} language={language}>
-              <WriteLetterScreen language={language} />
-            </SoftBanGate>
-          }
-        />
+        <Route path="/write/:profileId" element={<WriteLetterScreen language={language} />} />
         <Route path="/chat/:id" element={<ChatScreen language={language} />} />
         <Route
           path="/credits"

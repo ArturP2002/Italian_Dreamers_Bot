@@ -10,12 +10,13 @@ from dataclasses import dataclass
 from urllib.parse import parse_qsl
 
 from fastapi import Depends, Header, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings, get_settings
 from app.database import get_session
-from app.models import User
+from app.models import Profile, User
 
 
 @dataclass(frozen=True)
@@ -103,10 +104,12 @@ async def upsert_user_from_telegram(
         "language_code": lang[:2],
     }
     update_set: dict = {
-        "telegram_username": tg.username,
         "telegram_first_name": tg.first_name,
         "telegram_last_name": tg.last_name,
     }
+    # initData username is stale until the Mini App is reopened — never wipe a stored nick with None.
+    if tg.username:
+        update_set["telegram_username"] = tg.username
     if preferred_language is not None:
         update_set["language_code"] = lang[:2]
 
@@ -124,6 +127,13 @@ async def upsert_user_from_telegram(
     await session.commit()
     user = await session.get(User, user_id)
     assert user is not None
+    if user.telegram_username:
+        result = await session.execute(select(Profile).where(Profile.user_id == user.id))
+        profile = result.scalar_one_or_none()
+        if profile is not None and profile.telegram_username != user.telegram_username:
+            profile.telegram_username = user.telegram_username
+            session.add(profile)
+            await session.commit()
     return user
 
 

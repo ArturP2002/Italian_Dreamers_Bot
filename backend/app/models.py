@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    Date,
     DateTime,
     JSON,
     ForeignKey,
@@ -76,6 +77,18 @@ class PaymentProduct(StrEnum):
     MESSAGE_PACK_10 = "message_pack_10"
     PROFILE_PUBLISH = "profile_publish"
     AD_SLOT = "ad_slot"
+    UNLIMITED_SUB = "unlimited_sub"
+    CATALOG_TOP = "catalog_top"
+
+
+class PaymentProvider(StrEnum):
+    STARS = "stars"
+    YOOKASSA = "yookassa"
+
+
+class PaymentCurrency(StrEnum):
+    XTR = "XTR"
+    RUB = "RUB"
 
 
 class PaymentStatus(StrEnum):
@@ -111,6 +124,33 @@ class ComplaintStatus(StrEnum):
     DISMISSED = "dismissed"
 
 
+class VerificationStatus(StrEnum):
+    NONE = "none"
+    PENDING = "pending"
+    VERIFIED = "verified"
+    REJECTED = "rejected"
+
+
+class SubscriptionStatus(StrEnum):
+    ACTIVE = "active"
+    CANCELED = "canceled"
+    EXPIRED = "expired"
+
+
+class LegacyAnketaStatus(StrEnum):
+    PENDING = "pending"
+    INVITED = "invited"
+    ACTIVATED = "activated"
+    SKIPPED = "skipped"
+
+
+class CommentDecision(StrEnum):
+    KEEP = "keep"
+    DELETE = "delete"
+    SKIP = "skip"
+    FALSE_POSITIVE = "false_positive"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -129,6 +169,11 @@ class User(Base):
     message_credits: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     is_blocked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     soft_ban_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    telegram_platform: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    bot_write_access: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    bot_write_access_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    username_nudge_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    username_nudge_2_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     referral_code: Mapped[str | None] = mapped_column(String(32), unique=True, nullable=True)
     referred_by_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
@@ -219,6 +264,15 @@ class Profile(Base):
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     hidden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    unpaid_reminded_3d_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    unpaid_reminded_14d_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    unpaid_reminded_27d_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    verification_status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=VerificationStatus.NONE.value, server_default="none"
+    )
+    verification_photo_file_id: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    top_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 
     name_translated: Mapped[str | None] = mapped_column(String(255), nullable=True)
     city_translated: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -242,6 +296,10 @@ class Profile(Base):
         back_populates="profile",
         passive_deletes=True,
     )
+    publication_slots: Mapped[list[PublicationSlot]] = relationship(
+        back_populates="profile",
+        passive_deletes=True,
+    )
 
 
 class ProfilePhoto(Base):
@@ -258,6 +316,29 @@ class ProfilePhoto(Base):
     )
 
     profile: Mapped[Profile] = relationship(back_populates="photos")
+
+
+class PublicationSlot(Base):
+    """One of 10 daily channel slots (Rome date). gender is the quota, occupant may differ."""
+
+    __tablename__ = "publication_slots"
+    __table_args__ = (
+        UniqueConstraint("slot_date", "slot_index", name="uq_publication_slots_date_index"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    slot_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    slot_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    time_local: Mapped[str] = mapped_column(String(5), nullable=False)
+    gender: Mapped[str] = mapped_column(String(16), nullable=False)
+    profile_id: Mapped[int | None] = mapped_column(
+        ForeignKey("profiles.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    profile: Mapped[Profile | None] = relationship(back_populates="publication_slots")
 
 
 class MessageRequest(Base):
@@ -361,7 +442,15 @@ class Payment(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     product: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(32), default=PaymentStatus.PENDING.value, nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=PaymentProvider.STARS.value, server_default="stars"
+    )
+    currency: Mapped[str] = mapped_column(
+        String(8), nullable=False, default=PaymentCurrency.XTR.value, server_default="XTR"
+    )
+    amount: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     stars_amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    provider_payment_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     telegram_payment_charge_id: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
     telegram_payload: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     related_profile_id: Mapped[int | None] = mapped_column(
@@ -454,4 +543,101 @@ class Complaint(Base):
     reporter: Mapped[User] = relationship(
         back_populates="complaints_filed",
         foreign_keys=[reporter_user_id],
+    )
+
+
+class Like(Base):
+    __tablename__ = "likes"
+    __table_args__ = (UniqueConstraint("from_user_id", "profile_id", name="uq_likes_user_profile"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    from_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    profile_id: Mapped[int] = mapped_column(ForeignKey("profiles.id", ondelete="CASCADE"), nullable=False, index=True)
+    matched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class Subscription(Base):
+    __tablename__ = "subscriptions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=SubscriptionStatus.ACTIVE.value, index=True
+    )
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    canceled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    telegram_charge_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    payment_id: Mapped[int | None] = mapped_column(ForeignKey("payments.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class GroupComment(Base):
+    __tablename__ = "group_comments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    telegram_user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    telegram_message_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    username: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    decision: Mapped[str] = mapped_column(String(32), nullable=False, default=CommentDecision.KEEP.value, index=True)
+    reason: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class GroupStrike(Base):
+    __tablename__ = "group_strikes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    telegram_user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, unique=True, index=True)
+    count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    window_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    restricted_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class LegacyAnketa(Base):
+    __tablename__ = "legacy_anketas"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    channel_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    gender: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    city: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    age: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    telegram_username: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=LegacyAnketaStatus.PENDING.value, index=True
+    )
+    invite_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    invited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    activated_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class WeeklyReport(Base):
+    __tablename__ = "weekly_reports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, unique=True)
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )

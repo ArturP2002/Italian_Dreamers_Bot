@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -13,7 +13,7 @@ from sqlalchemy.orm import selectinload
 from app.auth import AuthContext, require_admin
 from app.config import Settings, get_settings
 from app.database import get_session
-from app.models import AdRequest, Complaint, Payment, Profile, ProfileStatus, User
+from app.models import AdRequest, Complaint, Payment, Profile, ProfileStatus, PublicationSlot, User
 from app.services.ads import (
     AdServiceError,
     activate_ad,
@@ -27,6 +27,7 @@ from app.services.channel import publish_profile_to_channel
 from app.services.complaints import get_complaint, list_complaints, resolve_complaint
 from app.services.greeting_video import video_url
 from app.services.moderation import (
+    REJECT_PRESETS,
     admin_stats,
     approve_profile,
     count_profiles,
@@ -34,12 +35,14 @@ from app.services.moderation import (
     first_photo_file_ids,
     get_profile_admin,
     grant_credits,
+    list_credit_ledger,
     list_profiles,
     reject_profile,
     schedule_profile,
     search_users,
     set_user_blocked,
 )
+from app.services.slots import list_day_slots, occupy_slot, swap_slots, vacate_profile_slots
 from app.services.notify import notify_user_published
 from app.services.payments import (
     complete_ad_payment,
@@ -49,8 +52,10 @@ from app.services.payments import (
 )
 from app.services.takedown import list_takedowns, take_down_and_delete_profile
 from app.services.telegram_api import get_bot_username, send_message
+from app.api.admin_wave3 import router as wave3_router
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+router.include_router(wave3_router)
 
 
 class PhotoOut(BaseModel):
@@ -68,6 +73,7 @@ class ProfileListItem(BaseModel):
     city: str
     country: str
     telegram_username: str | None
+    has_username: bool = True
     user_telegram_id: int | None
     user_id: int
     moderation_feedback: str | None
@@ -160,6 +166,10 @@ def _list_item(profile: Profile, *, photo_file_id: str | None = None) -> Profile
         city=profile.city,
         country=profile.country,
         telegram_username=profile.telegram_username,
+        has_username=bool(
+            (profile.telegram_username or "").strip()
+            or (user.telegram_username if user else None)
+        ),
         user_telegram_id=user.telegram_id if user else None,
         user_id=profile.user_id,
         moderation_feedback=profile.moderation_feedback,
@@ -205,10 +215,19 @@ async def admin_ping(auth: AuthContext = Depends(require_admin)) -> dict:
 
 @router.get("/stats")
 async def get_stats(
+    period: str = Query(default="lifetime"),
     _auth: AuthContext = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
 ) -> dict:
-    return await admin_stats(session)
+    allowed = {"today", "week", "month", "lifetime"}
+    chosen = period if period in allowed else "lifetime"
+    return await admin_stats(session, period=chosen, tz_name=settings.app_timezone)
+
+
+@router.get("/reject-presets")
+async def reject_presets(_auth: AuthContext = Depends(require_admin)) -> list[dict]:
+    return REJECT_PRESETS
 
 
 class ProfileListPage(BaseModel):
@@ -222,7 +241,13 @@ class ProfileListPage(BaseModel):
 @router.get("/profiles", response_model=ProfileListPage)
 async def admin_list_profiles(
     status_filter: str | None = Query(default=None, alias="status"),
-    limit: int = Query(default=25, ge=1, le=200),
+    gender: str | None = Query(default=None),
+    age_min: int | None = Query(default=None, ge=18, le=99),
+    age_max: int | None = Query(default=None, ge=18, le=99),
+    has_username: bool | None = Query(default=None),
+    date_from: datetime | None = Query(default=None),
+    date_to: datetime | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     _auth: AuthContext = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
@@ -236,13 +261,22 @@ async def admin_list_profiles(
     elif status_filter:
         status_arg = status_filter
 
-    total = await count_profiles(session, status=status_arg, statuses=statuses_arg)
+    filters = dict(
+        gender=gender,
+        age_min=age_min,
+        age_max=age_max,
+        has_username=has_username,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    total = await count_profiles(session, status=status_arg, statuses=statuses_arg, **filters)
     profiles = await list_profiles(
         session,
         status=status_arg,
         statuses=statuses_arg,
         limit=limit,
         offset=offset,
+        **filters,
     )
     thumb_ids = await first_photo_file_ids(session, [p.id for p in profiles])
     items = [_list_item(p, photo_file_id=thumb_ids.get(p.id)) for p in profiles]
@@ -622,6 +656,169 @@ async def admin_unblock_user(
         profile_status=profile.status if profile else None,
         profile_name=profile.name if profile else None,
     )
+
+
+class CreditLedgerOut(BaseModel):
+    id: int
+    entry_type: str
+    delta: int
+    balance_after: int
+    note: str | None
+    created_at: datetime
+
+
+@router.get("/users/{user_id}/credits", response_model=list[CreditLedgerOut])
+async def admin_user_credits(
+    user_id: int,
+    limit: int = Query(default=50, ge=1, le=200),
+    _auth: AuthContext = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+) -> list[CreditLedgerOut]:
+    user = await session.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    entries = await list_credit_ledger(session, user_id, limit=limit)
+    return [
+        CreditLedgerOut(
+            id=e.id,
+            entry_type=e.entry_type,
+            delta=e.delta,
+            balance_after=e.balance_after,
+            note=e.note,
+            created_at=e.created_at,
+        )
+        for e in entries
+    ]
+
+
+class SlotProfileOut(BaseModel):
+    id: int
+    name: str
+    age: int
+    gender: str | None
+    status: str
+    photo_url: str | None = None
+
+
+class SlotOut(BaseModel):
+    id: int
+    slot_date: date
+    slot_index: int
+    time_local: str
+    gender: str
+    profile_id: int | None
+    scheduled_at: datetime | None = None
+    profile: SlotProfileOut | None = None
+
+
+class SlotDayOut(BaseModel):
+    date: date
+    items: list[SlotOut]
+
+
+class SlotAssignBody(BaseModel):
+    profile_id: int | None = None
+
+
+class SlotSwapBody(BaseModel):
+    other_slot_id: int
+
+
+def _slot_out(slot: PublicationSlot) -> SlotOut:
+    profile = slot.profile
+    photo = None
+    if profile and profile.photos:
+        first = sorted(profile.photos, key=lambda p: p.position)[0]
+        photo = _photo_url(first.file_id)
+    return SlotOut(
+        id=slot.id,
+        slot_date=slot.slot_date,
+        slot_index=slot.slot_index,
+        time_local=slot.time_local,
+        gender=slot.gender,
+        profile_id=slot.profile_id,
+        scheduled_at=profile.scheduled_at if profile else None,
+        profile=(
+            SlotProfileOut(
+                id=profile.id,
+                name=profile.name,
+                age=profile.age,
+                gender=profile.gender,
+                status=profile.status,
+                photo_url=photo,
+            )
+            if profile
+            else None
+        ),
+    )
+
+
+@router.get("/slots", response_model=SlotDayOut)
+async def admin_slots(
+    day: date | None = Query(default=None),
+    _auth: AuthContext = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> SlotDayOut:
+    from zoneinfo import ZoneInfo
+
+    chosen = day or datetime.now(ZoneInfo(settings.app_timezone)).date()
+    slots = await list_day_slots(session, settings, chosen)
+    await session.commit()
+    return SlotDayOut(date=chosen, items=[_slot_out(s) for s in slots])
+
+
+@router.post("/slots/{slot_id}/assign", response_model=SlotDayOut)
+async def admin_assign_slot(
+    slot_id: int,
+    body: SlotAssignBody,
+    _auth: AuthContext = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> SlotDayOut:
+    slot = await session.get(PublicationSlot, slot_id)
+    if slot is None:
+        raise HTTPException(status_code=404, detail="Slot not found")
+    if body.profile_id is None:
+        occupant_id = slot.profile_id
+        if occupant_id:
+            occupant = await session.get(Profile, occupant_id)
+            await vacate_profile_slots(session, occupant_id)
+            if occupant is not None and occupant.status == ProfileStatus.QUEUED.value:
+                occupant.scheduled_at = None
+                session.add(occupant)
+        slot.profile_id = None
+        session.add(slot)
+    else:
+        profile = await get_profile_admin(session, body.profile_id)
+        if profile is None:
+            raise HTTPException(status_code=404, detail="Profile not found")
+        if profile.status != ProfileStatus.QUEUED.value:
+            raise HTTPException(status_code=409, detail="Only queued profiles can occupy a slot")
+        try:
+            await occupy_slot(session, settings, slot, profile)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await session.commit()
+    slots = await list_day_slots(session, settings, slot.slot_date)
+    return SlotDayOut(date=slot.slot_date, items=[_slot_out(s) for s in slots])
+
+
+@router.post("/slots/{slot_id}/swap", response_model=SlotDayOut)
+async def admin_swap_slots(
+    slot_id: int,
+    body: SlotSwapBody,
+    _auth: AuthContext = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> SlotDayOut:
+    try:
+        slot_a, _slot_b = await swap_slots(session, settings, slot_id, body.other_slot_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    await session.commit()
+    slots = await list_day_slots(session, settings, slot_a.slot_date)
+    return SlotDayOut(date=slot_a.slot_date, items=[_slot_out(s) for s in slots])
 
 
 @router.post("/users/{user_id}/credits", response_model=UserOut)

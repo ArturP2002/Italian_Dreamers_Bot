@@ -26,6 +26,8 @@ type TelegramWebApp = {
     start_param?: string;
     [key: string]: unknown;
   };
+  platform?: string;
+  requestWriteAccess?: (callback?: (granted: boolean) => void) => void;
   ready: () => void;
   expand: () => void;
   themeParams: Record<string, string>;

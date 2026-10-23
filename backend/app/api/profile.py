@@ -33,6 +33,7 @@ from app.services.greeting_video import (
     video_url,
 )
 from app.services.notify import notify_admins_profile_submitted
+from app.services.username_nudge import maybe_nudge_after_submit
 from app.services.payments import create_publish_payment, send_publish_invoice
 from app.services.profiles import (
     CONTACT_CHECKED_FIELDS,
@@ -89,6 +90,8 @@ class ProfileOut(BaseModel):
     editable: bool
     can_pay: bool = False
     channel_post_url: str | None = None
+    verification_status: str = "none"
+    top_until: datetime | None = None
 
 
 class ProfileUpdate(BaseModel):
@@ -168,6 +171,8 @@ def _serialize(profile: Profile) -> ProfileOut:
         editable=profile.status in {ProfileStatus.DRAFT.value, ProfileStatus.REJECTED.value},
         can_pay=profile.status == ProfileStatus.AWAITING_PAYMENT.value,
         channel_post_url=_channel_post_url(profile),
+        verification_status=profile.verification_status,
+        top_until=profile.top_until,
     )
 
 
@@ -431,6 +436,9 @@ async def submit_profile(
     assert profile is not None
 
     await notify_admins_profile_submitted(settings, user=auth.user, profile=profile)
+    await maybe_nudge_after_submit(session, settings, user=auth.user, profile=profile)
+    profile = await get_user_profile(session, auth.user.id)
+    assert profile is not None
     return _serialize(profile)
 
 
@@ -445,6 +453,13 @@ async def request_publish_invoice(
         raise HTTPException(status_code=404, detail="Profile not found")
     if profile.status != ProfileStatus.AWAITING_PAYMENT.value:
         raise HTTPException(status_code=409, detail="Profile is not awaiting payment")
+
+    from app.services.entitlements import has_unlimited
+    from app.services.payments import queue_profile_after_entitlement
+
+    if await has_unlimited(session, auth.user.id):
+        await queue_profile_after_entitlement(session, settings, profile=profile, user=auth.user)
+        return {"ok": True, "queued": True}
 
     payment = await create_publish_payment(session, settings, user=auth.user, profile=profile)
     await send_publish_invoice(settings, user=auth.user, profile=profile, payment=payment)

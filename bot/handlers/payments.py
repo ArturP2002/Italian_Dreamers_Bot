@@ -11,9 +11,7 @@ from app.config import get_settings
 from app.database import async_session_factory
 from app.models import PaymentProduct, PaymentStatus
 from app.services.payments import (
-    complete_ad_payment,
-    complete_credit_payment,
-    complete_publish_payment,
+    complete_payment,
     get_payment_by_payload,
     parse_any_payment_payload,
 )
@@ -40,12 +38,18 @@ async def on_pre_checkout(query: PreCheckoutQuery) -> None:
             PaymentProduct.MESSAGE_CREDIT.value,
             PaymentProduct.MESSAGE_PACK_10.value,
             PaymentProduct.AD_SLOT.value,
+            PaymentProduct.UNLIMITED_SUB.value,
+            PaymentProduct.CATALOG_TOP.value,
         }
         if payment.product not in allowed:
             await query.answer(ok=False, error_message="Unsupported product")
             return
         if payment.stars_amount != query.total_amount:
             await query.answer(ok=False, error_message="Amount mismatch")
+            return
+        # Recurring Stars charges reuse the original payload after the first payment.
+        if payment.status == PaymentStatus.COMPLETED.value and payment.product == PaymentProduct.UNLIMITED_SUB.value:
+            await query.answer(ok=True)
             return
         if payment.status != PaymentStatus.PENDING.value:
             await query.answer(ok=False, error_message="Счёт устарел. Используйте последний счёт в чате.")
@@ -67,29 +71,13 @@ async def on_successful_payment(message: Message) -> None:
         if payment is None:
             logger.error("successful_payment with unknown payload: %s", payload)
             return
-        if payment.product == PaymentProduct.PROFILE_PUBLISH.value:
-            await complete_publish_payment(
+        try:
+            await complete_payment(
                 session,
                 settings,
                 payment=payment,
-                telegram_charge_id=payment_info.telegram_payment_charge_id,
+                provider_payment_id=payment_info.telegram_payment_charge_id,
+                subscription_expiration_date=getattr(payment_info, "subscription_expiration_date", None),
             )
-        elif payment.product in {
-            PaymentProduct.MESSAGE_CREDIT.value,
-            PaymentProduct.MESSAGE_PACK_10.value,
-        }:
-            await complete_credit_payment(
-                session,
-                settings,
-                payment=payment,
-                telegram_charge_id=payment_info.telegram_payment_charge_id,
-            )
-        elif payment.product == PaymentProduct.AD_SLOT.value:
-            await complete_ad_payment(
-                session,
-                settings,
-                payment=payment,
-                telegram_charge_id=payment_info.telegram_payment_charge_id,
-            )
-        else:
+        except ValueError:
             logger.warning("Unhandled payment product: %s", payment.product)

@@ -8,6 +8,7 @@ import {
   mediaUrl,
   type WriteTarget,
 } from "../lib/api";
+import { ensureWriteAccess } from "../lib/writeAccess";
 
 type Props = { language: Language };
 
@@ -20,6 +21,7 @@ export function WriteLetterScreen({ language }: Props) {
   const [age, setAge] = useState("");
   const [text, setText] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
+  const [photoIsMine, setPhotoIsMine] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [botUsername, setBotUsername] = useState<string | null>(null);
@@ -90,6 +92,15 @@ export function WriteLetterScreen({ language }: Props) {
       setError(t(language, "fieldRequired"));
       return;
     }
+    const hasExistingPhoto = Boolean(sender?.photo_url);
+    if (!hasExistingPhoto && !photo) {
+      setError(t(language, "writePhotoRequired"));
+      return;
+    }
+    if (photo && !photoIsMine) {
+      setError(t(language, "writePhotoMine"));
+      return;
+    }
     if (target) {
       const senderAge = sender ? sender.age : ageNum;
       if (senderAge < target.age_min || senderAge > target.age_max) {
@@ -99,12 +110,20 @@ export function WriteLetterScreen({ language }: Props) {
     }
     setBusy(true);
     try {
+      const granted = await ensureWriteAccess();
+      if (!granted) {
+        setError(t(language, "writeAccessDenied"));
+        const tg = window.Telegram?.WebApp;
+        if (tg?.showAlert) tg.showAlert(t(language, "writeAccessDenied"));
+        return;
+      }
       const created = await createLetter({
         profileId: id,
         text: text.trim(),
         senderName: sender ? undefined : name.trim(),
         senderAge: sender ? undefined : ageNum,
         photo,
+        photoIsMine: photoIsMine || !photo,
       });
       navigate(`/inbox/${created.id}`, { replace: true });
     } catch (e) {
@@ -123,6 +142,11 @@ export function WriteLetterScreen({ language }: Props) {
         else if (raw.includes("contact_forbidden")) code = "contact_forbidden";
         else if (raw.includes("soft_banned")) code = "soft_banned";
         else if (raw.includes("pending_limit")) code = "pending_limit";
+        else if (raw.includes("rate_hour")) code = "rate_hour";
+        else if (raw.includes("rate_day")) code = "rate_day";
+        else if (raw.includes("photo_required")) code = "photo_required";
+        else if (raw.includes("photo_not_confirmed")) code = "photo_not_confirmed";
+        else if (raw.includes("no_person")) code = "no_person";
       }
 
       const textByCode: Record<string, string> = {
@@ -130,6 +154,11 @@ export function WriteLetterScreen({ language }: Props) {
         contact_forbidden: t(language, "contactForbidden"),
         soft_banned: t(language, "letterSoftBanned"),
         pending_limit: t(language, "letterPendingLimit"),
+        rate_hour: t(language, "letterRateHour"),
+        rate_day: t(language, "letterRateDay"),
+        photo_required: t(language, "writePhotoRequired"),
+        photo_not_confirmed: t(language, "writePhotoMine"),
+        no_person: t(language, "writeNoPerson"),
       };
       const message = textByCode[code] ?? t(language, "errorGeneric");
       setError(message);
@@ -161,6 +190,7 @@ export function WriteLetterScreen({ language }: Props) {
       <p className="work-body">{tf(language, "letterTo", { name: target.name })}</p>
       <p className="home-meta">{t(language, "writeHint")}</p>
       <div className="write-push-hint">
+        <p>{t(language, "writeAccessNote")}</p>
         <p>{t(language, "writePushHint")}</p>
         {botUsername ? (
           <button
@@ -232,9 +262,22 @@ export function WriteLetterScreen({ language }: Props) {
         <input
           type="file"
           accept="image/*"
-          onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
+          onChange={(e) => {
+            setPhoto(e.target.files?.[0] ?? null);
+            setPhotoIsMine(false);
+          }}
         />
       </div>
+      {photo ? (
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
+            checked={photoIsMine}
+            onChange={(e) => setPhotoIsMine(e.target.checked)}
+          />
+          <span>{t(language, "writePhotoMine")}</span>
+        </label>
+      ) : null}
 
       <label className="wizard-hint">{t(language, "writeText")}</label>
       <div className="field">

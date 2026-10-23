@@ -80,8 +80,9 @@ async def send_invoice_stars(
     payload: str,
     stars_amount: int,
     label: str | None = None,
+    subscription_period: int | None = None,
 ) -> dict[str, Any]:
-    body = {
+    body: dict[str, Any] = {
         "chat_id": chat_id,
         "title": title[:32],
         "description": description[:255],
@@ -90,7 +91,27 @@ async def send_invoice_stars(
         "provider_token": "",
         "prices": [{"label": label or title[:32], "amount": stars_amount}],
     }
+    if subscription_period:
+        body["subscription_period"] = int(subscription_period)
     return await telegram_call(settings, "sendInvoice", json=body)
+
+
+async def edit_user_star_subscription(
+    settings: Settings,
+    user_id: int,
+    telegram_payment_charge_id: str,
+    *,
+    is_canceled: bool = True,
+) -> dict[str, Any]:
+    return await telegram_call(
+        settings,
+        "editUserStarSubscription",
+        json={
+            "user_id": user_id,
+            "telegram_payment_charge_id": telegram_payment_charge_id,
+            "is_canceled": is_canceled,
+        },
+    )
 
 
 async def send_photo_file(
@@ -215,6 +236,10 @@ async def delete_message(
         "deleteMessage",
         json={"chat_id": chat_id, "message_id": message_id},
     )
+
+
+async def get_chat(settings: Settings, chat_id: int) -> dict[str, Any]:
+    return await telegram_call(settings, "getChat", json={"chat_id": chat_id})
 
 
 async def get_bot_info(settings: Settings) -> dict:

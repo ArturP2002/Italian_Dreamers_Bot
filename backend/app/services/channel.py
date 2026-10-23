@@ -29,6 +29,7 @@ from app.services.telegram_api import (
     send_photo_file,
     send_photo_media,
 )
+from app.services.publication_cache import remember_publication
 from app.services.translate import translate_fields_or_passthrough
 
 logger = logging.getLogger(__name__)
@@ -105,8 +106,9 @@ def build_channel_caption(profile: Profile, language: str, fields: dict[str, str
     }.get(profile.marital_status, "single")
 
     emoji = "💃" if profile.gender != Gender.MALE.value else "🕺"
+    badge = " ✓" if profile.verification_status == "verified" else ""
     return (
-        f"{emoji} {name}, {profile.age} {t['years']}\n"
+        f"{emoji} {name}{badge}, {profile.age} {t['years']}\n"
         f"📍 {city}, {country}\n"
         f"📏 {t['height']}: {profile.height_cm} cm\n"
         f"💍 {t['marital']}: {t[marital_key]}\n"
@@ -345,6 +347,7 @@ async def publish_profile_to_channel(
     session.add(profile)
     await session.commit()
     await session.refresh(profile)
+    remember_publication(profile)
     return profile
 
 

@@ -16,6 +16,9 @@ from app.services.ads import process_ad_queue
 from app.services.channel import publish_profile_to_channel
 from app.services.notify import notify_user_published
 from app.services.telegram_api import get_bot_username
+from app.services.slots import backfill_unscheduled_queued
+from app.services.unpaid import process_unpaid_profiles
+from app.services.username_nudge import process_username_nudges
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +73,34 @@ async def scheduler_loop(stop_event: asyncio.Event, interval_seconds: float = 60
                 logger.info("Ad queue tick: %s", ad_stats)
         except Exception:
             logger.exception("Scheduler tick failed (ads)")
+        try:
+            unpaid_stats = await process_unpaid_profiles(settings)
+            if any(unpaid_stats.values()):
+                logger.info("Unpaid tick: %s", unpaid_stats)
+        except Exception:
+            logger.exception("Scheduler tick failed (unpaid)")
+        try:
+            async with async_session_factory() as session:
+                filled = await backfill_unscheduled_queued(session, settings)
+                if filled:
+                    await session.commit()
+                    logger.info("Assigned publication slots: %s", filled)
+        except Exception:
+            logger.exception("Scheduler tick failed (slots)")
+        try:
+            nudged = await process_username_nudges(settings)
+            if nudged:
+                logger.info("Username nudges sent: %s", nudged)
+        except Exception:
+            logger.exception("Scheduler tick failed (username nudges)")
+        try:
+            from app.services.weekly_report import maybe_send_weekly_report
+
+            report = await maybe_send_weekly_report(settings)
+            if report is not None:
+                logger.info("Weekly report sent id=%s", report.id)
+        except Exception:
+            logger.exception("Scheduler tick failed (weekly report)")
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=interval_seconds)
         except asyncio.TimeoutError:

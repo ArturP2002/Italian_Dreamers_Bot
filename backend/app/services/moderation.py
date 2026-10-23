@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -33,6 +33,30 @@ from app.services.notify import (
     notify_user_profile_rejected,
     notify_user_scheduled,
 )
+from app.services.slots import place_profile_at
+
+REJECT_PRESETS = [
+    {
+        "id": "photos",
+        "text": "Пожалуйста, загрузите другие фото: лицо крупным планом, без сильных фильтров, три разных снимка.",
+    },
+    {
+        "id": "blurry",
+        "text": "Фото слишком тёмные или размытые. Нужны чёткие фото, где вас хорошо видно.",
+    },
+    {
+        "id": "about",
+        "text": "Расскажите о себе подробнее: кто вы, чем живёте, кого ищете. Сейчас текста мало для публикации.",
+    },
+    {
+        "id": "age",
+        "text": "Возраст или данные в анкете выглядят недостоверно. Проверьте поля и отправьте снова.",
+    },
+    {
+        "id": "rules",
+        "text": "Анкета не соответствует правилам. Уберите контакты, рекламу и ссылки — и отправьте снова.",
+    },
+]
 
 
 def app_tz(settings: Settings) -> ZoneInfo:
@@ -79,16 +103,70 @@ def _profile_status_filter(
     return None
 
 
+def _apply_profile_filters(
+    stmt,
+    *,
+    status: str | None = None,
+    statuses: list[str] | None = None,
+    gender: str | None = None,
+    age_min: int | None = None,
+    age_max: int | None = None,
+    has_username: bool | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+):
+    filt = _profile_status_filter(status=status, statuses=statuses)
+    if filt is not None:
+        stmt = stmt.where(filt)
+    if gender in {"male", "female"}:
+        stmt = stmt.where(Profile.gender == gender)
+    if age_min is not None:
+        stmt = stmt.where(Profile.age >= age_min)
+    if age_max is not None:
+        stmt = stmt.where(Profile.age <= age_max)
+    if date_from is not None:
+        stmt = stmt.where(Profile.created_at >= date_from)
+    if date_to is not None:
+        stmt = stmt.where(Profile.created_at <= date_to)
+    if has_username is True:
+        stmt = stmt.where(
+            or_(
+                and_(Profile.telegram_username.is_not(None), Profile.telegram_username != ""),
+                and_(User.telegram_username.is_not(None), User.telegram_username != ""),
+            )
+        )
+    elif has_username is False:
+        stmt = stmt.where(
+            or_(Profile.telegram_username.is_(None), Profile.telegram_username == ""),
+            or_(User.telegram_username.is_(None), User.telegram_username == ""),
+        )
+    return stmt
+
+
 async def count_profiles(
     session: AsyncSession,
     *,
     status: str | None = None,
     statuses: list[str] | None = None,
+    gender: str | None = None,
+    age_min: int | None = None,
+    age_max: int | None = None,
+    has_username: bool | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
 ) -> int:
-    stmt = select(func.count()).select_from(Profile)
-    filt = _profile_status_filter(status=status, statuses=statuses)
-    if filt is not None:
-        stmt = stmt.where(filt)
+    stmt = select(func.count()).select_from(Profile).join(User, Profile.user_id == User.id)
+    stmt = _apply_profile_filters(
+        stmt,
+        status=status,
+        statuses=statuses,
+        gender=gender,
+        age_min=age_min,
+        age_max=age_max,
+        has_username=has_username,
+        date_from=date_from,
+        date_to=date_to,
+    )
     result = await session.execute(stmt)
     return int(result.scalar_one())
 
@@ -98,20 +176,35 @@ async def list_profiles(
     *,
     status: str | None = None,
     statuses: list[str] | None = None,
-    limit: int = 25,
+    gender: str | None = None,
+    age_min: int | None = None,
+    age_max: int | None = None,
+    has_username: bool | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    limit: int = 50,
     offset: int = 0,
 ) -> list[Profile]:
     """Lean list: profile + user only (no photos collection)."""
     stmt = (
         select(Profile)
+        .join(User, Profile.user_id == User.id)
         .options(selectinload(Profile.user))
         .order_by(Profile.updated_at.desc(), Profile.id.desc())
         .limit(limit)
         .offset(offset)
     )
-    filt = _profile_status_filter(status=status, statuses=statuses)
-    if filt is not None:
-        stmt = stmt.where(filt)
+    stmt = _apply_profile_filters(
+        stmt,
+        status=status,
+        statuses=statuses,
+        gender=gender,
+        age_min=age_min,
+        age_max=age_max,
+        has_username=has_username,
+        date_from=date_from,
+        date_to=date_to,
+    )
     result = await session.execute(stmt)
     return list(result.scalars().all())
 
@@ -134,6 +227,20 @@ async def approve_profile(
     if user is None:
         result = await session.execute(select(User).where(User.id == profile.user_id))
         user = result.scalar_one()
+
+    from app.services.entitlements import active_subscription, apply_top_until, has_unlimited
+    from app.services.notify import notify_unlimited_queued
+    from app.services.payments import queue_profile_after_entitlement
+
+    if await has_unlimited(session, user.id):
+        sub = await active_subscription(session, user.id)
+        if sub is not None:
+            apply_top_until(profile, sub.expires_at)
+            session.add(profile)
+            await session.commit()
+        await queue_profile_after_entitlement(session, settings, profile=profile, user=user)
+        await notify_unlimited_queued(settings, user=user, profile=profile)
+        return await get_profile_admin(session, profile.id)  # type: ignore[return-value]
 
     payment = await create_publish_payment(session, settings, user=user, profile=profile)
     await notify_user_profile_approved(settings, user=user, profile=profile, stars=payment.stars_amount)
@@ -175,7 +282,7 @@ async def schedule_profile(
         raise ValueError("Only paid (queued) profiles can be scheduled")
     if scheduled_at.tzinfo is None:
         scheduled_at = scheduled_at.replace(tzinfo=app_tz(settings))
-    profile.scheduled_at = scheduled_at.astimezone(timezone.utc)
+    await place_profile_at(session, settings, profile, scheduled_at)
     session.add(profile)
     await session.commit()
 
@@ -265,7 +372,37 @@ async def grant_credits(
     return user
 
 
-async def admin_stats(session: AsyncSession) -> dict:
+def period_bounds(period: str | None, tz: ZoneInfo) -> tuple[datetime | None, datetime]:
+    now = datetime.now(tz)
+    end = now.astimezone(timezone.utc)
+    if not period or period == "lifetime":
+        return None, end
+    start_local = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    if period == "week":
+        start_local = start_local - timedelta(days=start_local.weekday())
+    elif period == "month":
+        start_local = start_local.replace(day=1)
+    elif period != "today":
+        return None, end
+    return start_local.astimezone(timezone.utc), end
+
+
+async def list_credit_ledger(
+    session: AsyncSession,
+    user_id: int,
+    *,
+    limit: int = 50,
+) -> list[CreditLedgerEntry]:
+    result = await session.execute(
+        select(CreditLedgerEntry)
+        .where(CreditLedgerEntry.user_id == user_id)
+        .order_by(CreditLedgerEntry.created_at.desc(), CreditLedgerEntry.id.desc())
+        .limit(limit)
+    )
+    return list(result.scalars().all())
+
+
+async def admin_stats(session: AsyncSession, *, period: str | None = None, tz_name: str = "Europe/Rome") -> dict:
     async def count_profiles(status: str) -> int:
         result = await session.execute(
             select(func.count()).select_from(Profile).where(Profile.status == status)
@@ -405,7 +542,52 @@ async def admin_stats(session: AsyncSession) -> dict:
         ).scalar_one()
     )
 
+    start, end = period_bounds(period, ZoneInfo(tz_name))
+
+    def _window(column):
+        conds = [column.is_not(None), column <= end]
+        if start is not None:
+            conds.append(column >= start)
+        return and_(*conds)
+
+    async def _count(stmt) -> int:
+        return int((await session.execute(stmt)).scalar_one())
+
+    funnel_submitted = await _count(
+        select(func.count())
+        .select_from(Profile)
+        .where(Profile.status != ProfileStatus.DRAFT.value, _window(Profile.created_at))
+    )
+    funnel_approved = await _count(
+        select(func.count()).select_from(Profile).where(_window(Profile.approved_at))
+    )
+    funnel_paid = await _count(
+        select(func.count()).select_from(Profile).where(_window(Profile.paid_at))
+    )
+    funnel_published = await _count(
+        select(func.count()).select_from(Profile).where(_window(Profile.published_at))
+    )
+    letters_new = await _count(
+        select(func.count()).select_from(MessageRequest).where(_window(MessageRequest.created_at))
+    )
+    letters_replied_period = await _count(
+        select(func.count()).select_from(MessageRequest).where(_window(MessageRequest.responded_at))
+    )
+    letters_unlocked_period = await _count(
+        select(func.count()).select_from(MessageRequest).where(_window(MessageRequest.unlocked_at))
+    )
+    stars_period = (
+        await session.execute(
+            select(func.coalesce(func.sum(Payment.stars_amount), 0)).where(
+                Payment.status == PaymentStatus.COMPLETED.value,
+                Payment.currency == "XTR",
+                _window(Payment.completed_at),
+            )
+        )
+    ).scalar_one()
+
     return {
+        "period": period or "lifetime",
         "users_total": users_total,
         "users_blocked": blocked,
         "users_soft_banned": soft_banned,
@@ -415,7 +597,7 @@ async def admin_stats(session: AsyncSession) -> dict:
         "profiles_published": await count_profiles(ProfileStatus.PUBLISHED.value),
         "profiles_rejected": await count_profiles(ProfileStatus.REJECTED.value),
         "payments_completed": payments_done,
-        "stars_earned": int(stars_sum),
+        "stars_earned": int(stars_period if period and period != "lifetime" else stars_sum),
         "publish_payments": publish_payments,
         "credit_payments": credit_payments,
         "ad_payments": ad_payments,
@@ -428,4 +610,12 @@ async def admin_stats(session: AsyncSession) -> dict:
         "ads_queued": await count_ads(AdRequestStatus.QUEUED.value),
         "ads_active": await count_ads(AdRequestStatus.ACTIVE.value),
         "ads_expired": await count_ads(AdRequestStatus.EXPIRED.value),
+        "funnel_submitted": funnel_submitted,
+        "funnel_approved": funnel_approved,
+        "funnel_paid": funnel_paid,
+        "funnel_queued": funnel_paid,
+        "funnel_published": funnel_published,
+        "letters_new": letters_new,
+        "letters_replied_period": letters_replied_period,
+        "letters_unlocked_period": letters_unlocked_period,
     }

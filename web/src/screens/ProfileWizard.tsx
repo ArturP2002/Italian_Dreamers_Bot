@@ -4,11 +4,14 @@ import { guideAssets, guidePhotos, introVideo, wizardStepPhotos } from "../asset
 import { VideoNote } from "../components/VideoNote";
 import { COVER_QUESTIONS, type Language, type MessageKey, tf, t } from "../i18n/messages";
 import {
+  checkUsername,
   deleteGreetingVideo,
   deleteProfilePhoto,
+  fetchConfig,
   fetchProfile,
   mediaUrl,
   patchGender,
+  patchPlatform,
   submitProfile,
   updateProfile,
   uploadGreetingVideo,
@@ -17,6 +20,7 @@ import {
   type Profile,
   type ProfileUpdatePayload,
 } from "../lib/api";
+import { telegramPlatform, usernameHowtoSrcs } from "../lib/writeAccess";
 import { ProfileIntroScreen } from "./ProfileIntroScreen";
 
 const TOTAL_STEPS = 12;
@@ -111,6 +115,9 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
   );
   const [ageOk, setAgeOk] = useState(Boolean(me?.gender));
   const [consent, setConsent] = useState(false);
+  const [usernameCheckMsg, setUsernameCheckMsg] = useState<string | null>(null);
+  const [usernameChecking, setUsernameChecking] = useState(false);
+  const [channelUrl, setChannelUrl] = useState("https://t.me/italiandreamers");
   const fileRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -148,6 +155,15 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
         setPhase("intro");
       }
     })();
+  }, []);
+
+  useEffect(() => {
+    const platform = telegramPlatform();
+    if (platform) void patchPlatform(platform);
+    void fetchConfig().then((cfg) => {
+      const url = cfg?.channel_url?.trim();
+      if (url) setChannelUrl(url);
+    });
   }, []);
 
   const draft = useMemo(
@@ -295,10 +311,9 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
       case 12: {
         if (!consent) return setError(t(language, "fieldRequired"));
         const username = form.telegram_username.trim().replace(/^@/, "");
-        if (!username) return setError(t(language, "fieldRequired"));
         if (
           !(await save({
-            telegram_username: username,
+            telegram_username: username || undefined,
             personal_data_agreement: true,
             gender: gender ?? undefined,
           }))
@@ -543,6 +558,11 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
         <div className="my-profile-status">
           <strong>{t(language, titleKey)}</strong>
           <p>{t(language, bodyKey)}</p>
+          <p>
+            <a className="home-link" href={channelUrl} target="_blank" rel="noreferrer">
+              {t(language, "homeOpenChannel")}
+            </a>
+          </p>
           {postUrl ? (
             <button type="button" className="btn btn--dark btn--block" onClick={openPost}>
               {t(language, "myProfileOpenPost")}
@@ -962,6 +982,7 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
         <>
           <h2 className="wizard-title">{t(language, "qConsentTitle")}</h2>
           <div className="consent-box">{t(language, "consentShort")}</div>
+          <p className="wizard-hint">{t(language, "writeAccessNote")}</p>
           <div className="field">
             <label>{t(language, "qUsername")}</label>
             <input
@@ -973,6 +994,39 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
               {t(language, "qUsernameHint")}
             </span>
           </div>
+          {!form.telegram_username.trim() ? (
+            <>
+              <p className="wizard-hint">{t(language, "usernameMissingTitle")}</p>
+              <div className="username-howto">
+                {usernameHowtoSrcs(language).map((src) => (
+                  <a key={src} href={src} target="_blank" rel="noreferrer">
+                    <img src={src} alt="" />
+                  </a>
+                ))}
+              </div>
+              <button
+                type="button"
+                className="btn btn--block btn--ghost"
+                disabled={usernameChecking}
+                onClick={() => {
+                  void (async () => {
+                    setUsernameChecking(true);
+                    setUsernameCheckMsg(null);
+                    const res = await checkUsername();
+                    setUsernameChecking(false);
+                    if (res?.ok && res.username) {
+                      setForm((f) => ({ ...f, telegram_username: res.username ?? "" }));
+                      await onMeRefresh();
+                    }
+                    setUsernameCheckMsg(res?.message ?? t(language, "errorGeneric"));
+                  })();
+                }}
+              >
+                {usernameChecking ? t(language, "usernameChecking") : t(language, "usernameCheck")}
+              </button>
+              {usernameCheckMsg ? <p className="wizard-hint">{usernameCheckMsg}</p> : null}
+            </>
+          ) : null}
           <label className="checkbox-row">
             <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
             <span>{t(language, "consentAgree")}</span>

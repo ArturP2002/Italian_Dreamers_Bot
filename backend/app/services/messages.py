@@ -16,11 +16,13 @@ from app.models import (
     MessageRequest,
     MessageRequestStatus,
     Profile,
-    ProfileStatus,
     User,
 )
 from app.services.anti_contact import contains_contact_info
+from app.services.catalog import CATALOG_STATUSES
+from app.services.entitlements import has_unlimited
 from app.services.notify import (
+    notify_initiator_chat_opened,
     notify_initiator_pay_to_unlock,
     notify_new_letter,
     notify_parties_unlocked,
@@ -47,9 +49,10 @@ def _counterpart_lang(source: str) -> str:
 
 
 async def get_published_profile(session: AsyncSession, profile_id: int) -> Profile | None:
+    """Profile that can receive a letter: in the Mini App catalog (queued or published)."""
     result = await session.execute(
         select(Profile)
-        .where(Profile.id == profile_id, Profile.status == ProfileStatus.PUBLISHED.value)
+        .where(Profile.id == profile_id, Profile.status.in_(list(CATALOG_STATUSES)))
         .options(selectinload(Profile.user), selectinload(Profile.photos))
     )
     return result.scalar_one_or_none()
@@ -91,12 +94,8 @@ async def _assert_can_send(
     if sender.is_blocked:
         raise MessageServiceError("blocked", "User is blocked")
     now = datetime.now(timezone.utc)
-    if sender.soft_ban_until and sender.soft_ban_until > now:
-        raise MessageServiceError("soft_banned", "Soft-banned temporarily")
     if profile.user_id == sender.id:
         raise MessageServiceError("self", "Cannot write to your own profile")
-    if not profile.telegram_username and not (profile.user and profile.user.telegram_username):
-        raise MessageServiceError("no_username", "Profile author has no Telegram username")
 
     pending_pair = await session.execute(
         select(func.count())
@@ -116,17 +115,6 @@ async def _assert_can_send(
     )
     if int(pending_pair.scalar_one()) > 0:
         raise MessageServiceError("duplicate", "Already have an active request to this profile")
-
-    pending_out = await session.execute(
-        select(func.count())
-        .select_from(MessageRequest)
-        .where(
-            MessageRequest.sender_user_id == sender.id,
-            MessageRequest.status == MessageRequestStatus.PENDING.value,
-        )
-    )
-    if int(pending_out.scalar_one()) >= settings.rate_max_pending_outgoing:
-        raise MessageServiceError("pending_limit", "Too many pending outgoing letters")
 
     hour_ago = now - timedelta(hours=1)
     day_ago = now - timedelta(days=1)
@@ -155,22 +143,9 @@ async def _assert_can_send(
         ).scalar_one()
     )
     if hour_count >= settings.rate_contact_per_hour:
-        await _apply_soft_ban(session, settings, sender)
-        raise MessageServiceError("soft_banned", "Hourly contact limit — soft-ban applied")
+        raise MessageServiceError("rate_hour", "Hourly letter limit")
     if day_count >= settings.rate_contact_per_day:
-        await _apply_soft_ban(session, settings, sender)
-        raise MessageServiceError("soft_banned", "Daily contact limit — soft-ban applied")
-
-
-async def _apply_soft_ban(session: AsyncSession, settings: Settings, user: User) -> None:
-    until = datetime.now(timezone.utc) + timedelta(hours=settings.rate_soft_ban_hours)
-    # Extend if already soft-banned further out
-    if user.soft_ban_until and user.soft_ban_until > until:
-        return
-    user.soft_ban_until = until
-    session.add(user)
-    await session.commit()
-    await session.refresh(user)
+        raise MessageServiceError("rate_day", "Daily letter limit")
 
 
 async def create_message_request(
@@ -321,7 +296,12 @@ async def reply_message_request(
     mr = await get_message_request(session, mr.id)
     assert mr is not None
     if mr.sender:
-        await notify_initiator_pay_to_unlock(settings, initiator=mr.sender, request=mr)
+        if await has_unlimited(session, mr.sender.id):
+            mr = await unlock_with_credit(session, settings, mr=mr, actor=mr.sender)
+            await session.refresh(mr.sender)
+            await notify_initiator_chat_opened(settings, initiator=mr.sender, request=mr)
+        else:
+            await notify_initiator_pay_to_unlock(settings, initiator=mr.sender, request=mr)
     return mr
 
 
@@ -344,22 +324,23 @@ async def unlock_with_credit(
         raise MessageServiceError("profile_deleted", "The profile was taken down and deleted")
     if mr.status != MessageRequestStatus.REPLIED.value:
         raise MessageServiceError("bad_status", "Wait for a reply before paying")
-    if actor.message_credits < 1:
-        raise MessageServiceError("no_credits", "Not enough message credits")
-
-    actor.message_credits -= 1
-    session.add(actor)
-    session.add(
-        CreditLedgerEntry(
-            user_id=actor.id,
-            entry_type=LedgerEntryType.SPEND.value,
-            delta=-1,
-            balance_after=actor.message_credits,
-            payment_id=payment_id,
-            message_request_id=mr.id,
-            note="unlock_message",
+    unlimited = await has_unlimited(session, actor.id)
+    if not unlimited:
+        if actor.message_credits < 1:
+            raise MessageServiceError("no_credits", "Not enough message credits")
+        actor.message_credits -= 1
+        session.add(actor)
+        session.add(
+            CreditLedgerEntry(
+                user_id=actor.id,
+                entry_type=LedgerEntryType.SPEND.value,
+                delta=-1,
+                balance_after=actor.message_credits,
+                payment_id=payment_id,
+                message_request_id=mr.id,
+                note="unlock_message",
+            )
         )
-    )
     now = datetime.now(timezone.utc)
     mr.status = MessageRequestStatus.CHATTING.value
     mr.unlocked_at = now

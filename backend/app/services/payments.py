@@ -17,19 +17,32 @@ from app.models import (
     MessageRequest,
     MessageRequestStatus,
     Payment,
+    PaymentCurrency,
     PaymentProduct,
+    PaymentProvider,
     PaymentStatus,
     Profile,
     ProfileStatus,
+    Subscription,
+    SubscriptionStatus,
     User,
 )
-from app.services.telegram_api import send_invoice_stars, send_message
+from app.services.entitlements import (
+    SUBSCRIPTION_PERIOD,
+    active_subscription,
+    apply_top_for_user,
+    apply_top_until,
+    utcnow,
+)
+from app.services.telegram_api import edit_user_star_subscription, send_invoice_stars, send_message
 
 
 PAYLOAD_PREFIX = "pub"
 CREDIT_PAYLOAD_PREFIX = "cred"
 PACK_PAYLOAD_PREFIX = "pack"
 AD_PAYLOAD_PREFIX = "ad"
+SUB_PAYLOAD_PREFIX = "sub"
+TOP_PAYLOAD_PREFIX = "top"
 
 
 def make_publish_payload(payment_id: int, profile_id: int) -> str:
@@ -94,8 +107,57 @@ def parse_ad_payload(payload: str) -> tuple[int, int] | None:
         return None
 
 
+def _stars_fields(stars: int) -> dict:
+    return {
+        "provider": PaymentProvider.STARS.value,
+        "currency": PaymentCurrency.XTR.value,
+        "amount": stars,
+        "stars_amount": stars,
+    }
+
+
+def _mark_provider_paid(payment: Payment, *, provider_payment_id: str | None) -> None:
+    if provider_payment_id:
+        payment.provider_payment_id = provider_payment_id
+        payment.telegram_payment_charge_id = provider_payment_id
+    if not payment.provider:
+        payment.provider = PaymentProvider.STARS.value
+    if not payment.currency:
+        payment.currency = PaymentCurrency.XTR.value
+    if not payment.amount:
+        payment.amount = payment.stars_amount
+
+
+def make_sub_payload(payment_id: int) -> str:
+    return f"{SUB_PAYLOAD_PREFIX}:{payment_id}"
+
+
+def parse_sub_payload(payload: str) -> int | None:
+    parts = payload.split(":")
+    if len(parts) != 2 or parts[0] != SUB_PAYLOAD_PREFIX:
+        return None
+    try:
+        return int(parts[1])
+    except ValueError:
+        return None
+
+
+def make_top_payload(payment_id: int, profile_id: int) -> str:
+    return f"{TOP_PAYLOAD_PREFIX}:{payment_id}:{profile_id}"
+
+
+def parse_top_payload(payload: str) -> tuple[int, int] | None:
+    parts = payload.split(":")
+    if len(parts) != 3 or parts[0] != TOP_PAYLOAD_PREFIX:
+        return None
+    try:
+        return int(parts[1]), int(parts[2])
+    except ValueError:
+        return None
+
+
 def parse_any_payment_payload(payload: str) -> str | None:
-    """Return product kind: publish | credit | pack | ad."""
+    """Return product kind: publish | credit | pack | ad | sub | top."""
     if parse_publish_payload(payload):
         return "publish"
     if parse_credit_payload(payload):
@@ -104,6 +166,10 @@ def parse_any_payment_payload(payload: str) -> str | None:
         return "pack"
     if parse_ad_payload(payload):
         return "ad"
+    if parse_sub_payload(payload) is not None:
+        return "sub"
+    if parse_top_payload(payload):
+        return "top"
     return None
 
 
@@ -118,8 +184,8 @@ async def create_publish_payment(
         user_id=user.id,
         product=PaymentProduct.PROFILE_PUBLISH.value,
         status=PaymentStatus.PENDING.value,
-        stars_amount=settings.price_profile_publish_stars,
         related_profile_id=profile.id,
+        **_stars_fields(settings.price_profile_publish_stars),
     )
     session.add(payment)
     await session.flush()
@@ -175,8 +241,7 @@ async def complete_publish_payment(
 
     payment.status = PaymentStatus.COMPLETED.value
     payment.completed_at = datetime.now(timezone.utc)
-    if telegram_charge_id:
-        payment.telegram_payment_charge_id = telegram_charge_id
+    _mark_provider_paid(payment, provider_payment_id=telegram_charge_id)
     session.add(payment)
 
     result = await session.execute(select(Profile).where(Profile.id == payment.related_profile_id))
@@ -184,25 +249,36 @@ async def complete_publish_payment(
     profile.status = ProfileStatus.QUEUED.value
     profile.paid_at = datetime.now(timezone.utc)
     session.add(profile)
+    await session.flush()
+
+    from app.services.notify import notify_user_scheduled
+    from app.services.slots import assign_next_slot
+
+    slot = await assign_next_slot(session, settings, profile)
     await session.commit()
     await session.refresh(profile)
 
     user_result = await session.execute(select(User).where(User.id == payment.user_id))
     user = user_result.scalar_one()
-    lang = user.language_code if user.language_code in {"ru", "it"} else "ru"
-    if lang == "it":
-        text = (
-            "✅ Pagamento ricevuto.\n\n"
-            "Il tuo profilo è in coda di pubblicazione. "
-            "Ti scriveremo la data esatta non appena l’amministratore la fisserà."
+    if slot is not None and profile.scheduled_at is not None:
+        await notify_user_scheduled(
+            settings, user=user, profile=profile, scheduled_at=profile.scheduled_at
         )
     else:
-        text = (
-            "✅ Оплата получена.\n\n"
-            "Анкета в очереди на публикацию. "
-            "Точную дату сообщим, как только администратор назначит её в календаре."
-        )
-    await send_message(settings, user.telegram_id, text)
+        lang = user.language_code if user.language_code in {"ru", "it"} else "ru"
+        if lang == "it":
+            text = (
+                "✅ Pagamento ricevuto.\n\n"
+                "Il tuo profilo è in coda di pubblicazione. "
+                "Ti scriveremo la data esatta non appena l’amministratore la fisserà."
+            )
+        else:
+            text = (
+                "✅ Оплата получена.\n\n"
+                "Анкета в очереди на публикацию. "
+                "Точную дату сообщим, как только администратор назначит её в календаре."
+            )
+        await send_message(settings, user.telegram_id, text)
     return profile
 
 
@@ -232,8 +308,8 @@ async def create_credit_payment(
         user_id=user.id,
         product=product,
         status=PaymentStatus.PENDING.value,
-        stars_amount=stars,
         related_message_request_id=message_request_id,
+        **_stars_fields(stars),
     )
     session.add(payment)
     await session.flush()
@@ -344,8 +420,7 @@ async def complete_credit_payment(
 
     payment.status = PaymentStatus.COMPLETED.value
     payment.completed_at = datetime.now(timezone.utc)
-    if telegram_charge_id:
-        payment.telegram_payment_charge_id = telegram_charge_id
+    _mark_provider_paid(payment, provider_payment_id=telegram_charge_id)
     session.add(payment)
 
     user.message_credits += delta
@@ -394,8 +469,8 @@ async def create_ad_payment(
         user_id=user.id,
         product=PaymentProduct.AD_SLOT.value,
         status=PaymentStatus.PENDING.value,
-        stars_amount=settings.price_ad_slot_stars,
         related_ad_request_id=ad.id,
+        **_stars_fields(settings.price_ad_slot_stars),
     )
     session.add(payment)
     await session.flush()
@@ -454,8 +529,7 @@ async def complete_ad_payment(
 
     payment.status = PaymentStatus.COMPLETED.value
     payment.completed_at = datetime.now(timezone.utc)
-    if telegram_charge_id:
-        payment.telegram_payment_charge_id = telegram_charge_id
+    _mark_provider_paid(payment, provider_payment_id=telegram_charge_id)
     session.add(payment)
 
     ad.status = AdRequestStatus.QUEUED.value
@@ -488,3 +562,334 @@ async def complete_ad_payment(
         )
     await send_message(settings, user.telegram_id, text)
     return ad
+
+
+async def queue_profile_after_entitlement(
+    session: AsyncSession,
+    settings: Settings,
+    *,
+    profile: Profile,
+    user: User,
+) -> Profile:
+    """Move awaiting_payment profile to queued + slot without a publish invoice."""
+    if profile.status != ProfileStatus.AWAITING_PAYMENT.value:
+        return profile
+    profile.status = ProfileStatus.QUEUED.value
+    profile.paid_at = profile.paid_at or utcnow()
+    session.add(profile)
+    await session.flush()
+
+    from app.services.notify import notify_user_scheduled
+    from app.services.slots import assign_next_slot
+
+    slot = await assign_next_slot(session, settings, profile)
+    await session.commit()
+    await session.refresh(profile)
+    if slot is not None and profile.scheduled_at is not None:
+        await notify_user_scheduled(
+            settings, user=user, profile=profile, scheduled_at=profile.scheduled_at
+        )
+    return profile
+
+
+async def create_unlimited_payment(
+    session: AsyncSession,
+    settings: Settings,
+    *,
+    user: User,
+) -> Payment:
+    payment = Payment(
+        user_id=user.id,
+        product=PaymentProduct.UNLIMITED_SUB.value,
+        status=PaymentStatus.PENDING.value,
+        **_stars_fields(settings.price_unlimited_sub_stars),
+    )
+    session.add(payment)
+    await session.flush()
+    payment.telegram_payload = make_sub_payload(payment.id)
+    session.add(payment)
+    await session.commit()
+    await session.refresh(payment)
+    return payment
+
+
+async def send_unlimited_invoice(settings: Settings, *, user: User, payment: Payment) -> None:
+    lang = user.language_code if user.language_code in {"ru", "it"} else "ru"
+    if lang == "it":
+        title = "Abbonamento illimitato"
+        description = (
+            "30 giorni: lettere, pubblicazione e cima del catalogo. "
+            "La pubblicità resta a parte. Rinnovo automatico Stars."
+        )
+    else:
+        title = "Безлимит 30 дней"
+        description = (
+            "Письма, публикация и топ каталога на 30 дней. "
+            "Реклама отдельно. Автопродление Telegram Stars."
+        )
+    await send_invoice_stars(
+        settings,
+        user.telegram_id,
+        title=title,
+        description=description,
+        payload=payment.telegram_payload or make_sub_payload(payment.id),
+        stars_amount=payment.stars_amount,
+        label=title,
+        subscription_period=settings.subscription_period_seconds,
+    )
+
+
+def _expiry_from_telegram(timestamp: int | None) -> datetime:
+    if timestamp:
+        return datetime.fromtimestamp(int(timestamp), tz=timezone.utc)
+    return utcnow() + SUBSCRIPTION_PERIOD
+
+
+async def _upsert_subscription(
+    session: AsyncSession,
+    *,
+    user: User,
+    payment: Payment,
+    expires_at: datetime,
+    charge_id: str | None,
+) -> Subscription:
+    existing = await active_subscription(session, user.id)
+    now = utcnow()
+    if existing is None:
+        existing = Subscription(
+            user_id=user.id,
+            status=SubscriptionStatus.ACTIVE.value,
+            started_at=now,
+            expires_at=expires_at,
+            telegram_charge_id=charge_id,
+            payment_id=payment.id,
+        )
+    else:
+        if existing.expires_at < expires_at:
+            existing.expires_at = expires_at
+        existing.status = SubscriptionStatus.ACTIVE.value
+        existing.canceled_at = None
+        if charge_id:
+            existing.telegram_charge_id = charge_id
+        existing.payment_id = payment.id
+    session.add(existing)
+    await apply_top_for_user(session, user.id, existing.expires_at)
+    return existing
+
+
+async def complete_unlimited_payment(
+    session: AsyncSession,
+    settings: Settings,
+    *,
+    payment: Payment,
+    telegram_charge_id: str | None,
+    subscription_expiration_date: int | None = None,
+) -> Subscription:
+    user_result = await session.execute(select(User).where(User.id == payment.user_id))
+    user = user_result.scalar_one()
+    expires_at = _expiry_from_telegram(subscription_expiration_date)
+
+    if payment.status == PaymentStatus.COMPLETED.value:
+        if telegram_charge_id and telegram_charge_id != payment.telegram_payment_charge_id:
+            renewal = Payment(
+                user_id=user.id,
+                product=PaymentProduct.UNLIMITED_SUB.value,
+                status=PaymentStatus.COMPLETED.value,
+                completed_at=utcnow(),
+                telegram_payload=payment.telegram_payload,
+                **_stars_fields(payment.stars_amount or settings.price_unlimited_sub_stars),
+            )
+            _mark_provider_paid(renewal, provider_payment_id=telegram_charge_id)
+            session.add(renewal)
+            await session.flush()
+            sub = await _upsert_subscription(
+                session, user=user, payment=renewal, expires_at=expires_at, charge_id=telegram_charge_id
+            )
+            await session.commit()
+            await session.refresh(sub)
+            return sub
+        sub = await active_subscription(session, user.id)
+        if sub is not None:
+            return sub
+        sub = await _upsert_subscription(
+            session, user=user, payment=payment, expires_at=expires_at, charge_id=telegram_charge_id
+        )
+        await session.commit()
+        return sub
+
+    payment.status = PaymentStatus.COMPLETED.value
+    payment.completed_at = utcnow()
+    _mark_provider_paid(payment, provider_payment_id=telegram_charge_id)
+    session.add(payment)
+    sub = await _upsert_subscription(
+        session, user=user, payment=payment, expires_at=expires_at, charge_id=telegram_charge_id
+    )
+    await session.commit()
+
+    lang = user.language_code if user.language_code in {"ru", "it"} else "ru"
+    until = sub.expires_at.astimezone(timezone.utc).strftime("%d.%m.%Y")
+    if lang == "it":
+        text = (
+            "✅ Abbonamento illimitato attivo fino al "
+            f"<b>{until}</b>.\nLettere, pubblicazione e cima del catalogo sono inclusi."
+        )
+    else:
+        text = (
+            "✅ Безлимит активен до "
+            f"<b>{until}</b>.\nПисьма, публикация и топ каталога включены."
+        )
+    await send_message(settings, user.telegram_id, text)
+
+    profile_result = await session.execute(select(Profile).where(Profile.user_id == user.id))
+    profile = profile_result.scalar_one_or_none()
+    if profile is not None and profile.status == ProfileStatus.AWAITING_PAYMENT.value:
+        await queue_profile_after_entitlement(session, settings, profile=profile, user=user)
+    return sub
+
+
+async def cancel_unlimited_subscription(
+    session: AsyncSession,
+    settings: Settings,
+    *,
+    user: User,
+) -> Subscription | None:
+    sub = await active_subscription(session, user.id)
+    if sub is None:
+        return None
+    sub.status = SubscriptionStatus.CANCELED.value
+    sub.canceled_at = utcnow()
+    session.add(sub)
+    await session.commit()
+    if sub.telegram_charge_id:
+        try:
+            await edit_user_star_subscription(
+                settings,
+                user.telegram_id,
+                sub.telegram_charge_id,
+                is_canceled=True,
+            )
+        except Exception:
+            pass
+    return sub
+
+
+async def create_catalog_top_payment(
+    session: AsyncSession,
+    settings: Settings,
+    *,
+    user: User,
+    profile: Profile,
+) -> Payment:
+    payment = Payment(
+        user_id=user.id,
+        product=PaymentProduct.CATALOG_TOP.value,
+        status=PaymentStatus.PENDING.value,
+        related_profile_id=profile.id,
+        **_stars_fields(settings.price_catalog_top_stars),
+    )
+    session.add(payment)
+    await session.flush()
+    payment.telegram_payload = make_top_payload(payment.id, profile.id)
+    session.add(payment)
+    await session.commit()
+    await session.refresh(payment)
+    return payment
+
+
+async def send_catalog_top_invoice(
+    settings: Settings,
+    *,
+    user: User,
+    profile: Profile,
+    payment: Payment,
+) -> None:
+    lang = user.language_code if user.language_code in {"ru", "it"} else "ru"
+    if lang == "it":
+        title = "Cima del catalogo"
+        description = f"30 giorni in cima al catalogo Mini App per {profile.name}."
+    else:
+        title = "Топ каталога"
+        description = f"30 дней в топе каталога Mini App для {profile.name}."
+    await send_invoice_stars(
+        settings,
+        user.telegram_id,
+        title=title,
+        description=description,
+        payload=payment.telegram_payload or make_top_payload(payment.id, profile.id),
+        stars_amount=payment.stars_amount,
+        label=title,
+    )
+
+
+async def complete_catalog_top_payment(
+    session: AsyncSession,
+    settings: Settings,
+    *,
+    payment: Payment,
+    telegram_charge_id: str | None,
+) -> Profile:
+    result = await session.execute(select(Profile).where(Profile.id == payment.related_profile_id))
+    profile = result.scalar_one()
+    if payment.status == PaymentStatus.COMPLETED.value:
+        return profile
+    payment.status = PaymentStatus.COMPLETED.value
+    payment.completed_at = utcnow()
+    _mark_provider_paid(payment, provider_payment_id=telegram_charge_id)
+    session.add(payment)
+    until = utcnow() + SUBSCRIPTION_PERIOD
+    if profile.top_until and profile.top_until > utcnow():
+        until = profile.top_until + SUBSCRIPTION_PERIOD
+    apply_top_until(profile, until)
+    session.add(profile)
+    await session.commit()
+    await session.refresh(profile)
+
+    user_result = await session.execute(select(User).where(User.id == payment.user_id))
+    user = user_result.scalar_one()
+    lang = user.language_code if user.language_code in {"ru", "it"} else "ru"
+    stamp = profile.top_until.strftime("%d.%m.%Y") if profile.top_until else "—"
+    if lang == "it":
+        text = f"✅ Sei in cima al catalogo fino al <b>{stamp}</b>."
+    else:
+        text = f"✅ Анкета в топе каталога до <b>{stamp}</b>."
+    await send_message(settings, user.telegram_id, text)
+    return profile
+
+
+async def complete_payment(
+    session: AsyncSession,
+    settings: Settings,
+    *,
+    payment: Payment,
+    provider_payment_id: str | None,
+    subscription_expiration_date: int | None = None,
+):
+    """Idempotent fulfillment. Stars and (later) YooKassa both call this."""
+    if payment.product == PaymentProduct.PROFILE_PUBLISH.value:
+        return await complete_publish_payment(
+            session, settings, payment=payment, telegram_charge_id=provider_payment_id
+        )
+    if payment.product in {
+        PaymentProduct.MESSAGE_CREDIT.value,
+        PaymentProduct.MESSAGE_PACK_10.value,
+    }:
+        return await complete_credit_payment(
+            session, settings, payment=payment, telegram_charge_id=provider_payment_id
+        )
+    if payment.product == PaymentProduct.AD_SLOT.value:
+        return await complete_ad_payment(
+            session, settings, payment=payment, telegram_charge_id=provider_payment_id
+        )
+    if payment.product == PaymentProduct.UNLIMITED_SUB.value:
+        return await complete_unlimited_payment(
+            session,
+            settings,
+            payment=payment,
+            telegram_charge_id=provider_payment_id,
+            subscription_expiration_date=subscription_expiration_date,
+        )
+    if payment.product == PaymentProduct.CATALOG_TOP.value:
+        return await complete_catalog_top_payment(
+            session, settings, payment=payment, telegram_charge_id=provider_payment_id
+        )
+    raise ValueError(f"Unsupported product {payment.product}")

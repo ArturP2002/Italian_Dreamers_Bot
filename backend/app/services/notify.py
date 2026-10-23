@@ -8,7 +8,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from app.config import Settings
-from app.models import AdRequest, MessageRequest, Profile, User
+from app.models import AdRequest, LegacyAnketa, MessageRequest, Profile, User
 from app.services.telegram_api import TelegramApiError, get_bot_username, send_message
 
 logger = logging.getLogger(__name__)
@@ -24,6 +24,15 @@ def _webapp_button(url: str, label: str) -> dict:
     return {"inline_keyboard": [[{"text": label, "web_app": {"url": url}}]]}
 
 
+def _channel_line(settings: Settings, lang: str) -> str:
+    url = (settings.channel_url or "").strip()
+    if not url:
+        return ""
+    if lang == "it":
+        return f"\n\nCanale: {url}"
+    return f"\n\nКанал: {url}"
+
+
 async def notify_admins_profile_submitted(
     settings: Settings,
     *,
@@ -35,12 +44,13 @@ async def notify_admins_profile_submitted(
         return
 
     name = profile.name or user.telegram_first_name or "—"
-    username = profile.telegram_username or user.telegram_username or "—"
+    username = profile.telegram_username or user.telegram_username
+    nick = f"@{username}" if username else "⚠️ нет ника"
     text = (
         f"🆕 Новая анкета на модерации\n"
         f"ID: {profile.id}\n"
         f"Имя: {name}, {profile.age}\n"
-        f"@{username}\n"
+        f"{nick}\n"
         f"tg_id: {user.telegram_id}"
     )
     for admin_id in admin_ids:
@@ -66,12 +76,14 @@ async def notify_user_profile_approved(
             f"✅ Il tuo profilo <b>{profile.name}</b> è stato approvato.\n\n"
             f"Per pubblicarlo nel canale, paga <b>{stars} ★</b>.\n"
             "Ti inviamo la fattura Telegram Stars qui sotto."
+            f"{_channel_line(settings, 'it')}"
         )
     else:
         text = (
             f"✅ Анкета <b>{profile.name}</b> одобрена.\n\n"
             f"Чтобы опубликовать её в канале, оплатите <b>{stars} ★</b>.\n"
             "Счёт в Telegram Stars — в следующем сообщении."
+            f"{_channel_line(settings, 'ru')}"
         )
     try:
         await send_message(settings, user.telegram_id, text)
@@ -120,11 +132,13 @@ async def notify_user_scheduled(
         text = (
             f"📅 Data di pubblicazione fissata per <b>{profile.name}</b>:\n"
             f"<b>{date_str}</b> (ora di Roma)."
+            f"{_channel_line(settings, 'it')}"
         )
     else:
         text = (
             f"📅 Дата публикации анкеты <b>{profile.name}</b>:\n"
             f"<b>{date_str}</b> (по Риму)."
+            f"{_channel_line(settings, 'ru')}"
         )
     try:
         await send_message(settings, user.telegram_id, text)
@@ -139,14 +153,79 @@ async def notify_user_published(
     profile: Profile,
 ) -> None:
     lang = user.language_code if user.language_code in {"ru", "it"} else "ru"
+    extra = _channel_line(settings, lang)
     if lang == "it":
-        text = f"🎉 Il profilo <b>{profile.name}</b> è stato pubblicato nel canale."
+        text = f"🎉 Il profilo <b>{profile.name}</b> è stato pubblicato nel canale.{extra}"
     else:
-        text = f"🎉 Анкета <b>{profile.name}</b> опубликована в канале."
+        text = f"🎉 Анкета <b>{profile.name}</b> опубликована в канале.{extra}"
     try:
-        await send_message(settings, user.telegram_id, text)
+        await send_message(settings, user.telegram_id, text, disable_link_preview=True)
     except Exception:
         logger.exception("Failed to notify user %s about publish", user.telegram_id)
+
+
+async def notify_unpaid_reminder(
+    settings: Settings,
+    *,
+    user: User,
+    profile: Profile,
+    day: int,
+) -> bool:
+    lang = user.language_code if user.language_code in {"ru", "it"} else "ru"
+    extra = _channel_line(settings, lang)
+    left = max(30 - day, 0)
+    app_url = _app_link(settings, "home")
+    if lang == "it":
+        text = (
+            f"⏰ Promemoria: il profilo <b>{html.escape(profile.name, quote=False)}</b> "
+            f"è approvato, manca il pagamento della pubblicazione.\n"
+            f"Senza pagamento verrà eliminato tra {left} giorni.{extra}"
+        )
+        btn = "Paga la pubblicazione"
+    else:
+        text = (
+            f"⏰ Напоминание: анкета <b>{html.escape(profile.name, quote=False)}</b> "
+            f"одобрена, осталось оплатить публикацию.\n"
+            f"Без оплаты анкета будет удалена через {left} дн.{extra}"
+        )
+        btn = "Оплатить публикацию"
+    try:
+        await send_message(
+            settings,
+            user.telegram_id,
+            text,
+            reply_markup=_webapp_button(app_url, btn),
+            disable_link_preview=True,
+        )
+        return True
+    except Exception:
+        logger.exception("Failed unpaid reminder day %s for %s", day, user.telegram_id)
+        return False
+
+
+async def notify_unpaid_deleted(
+    settings: Settings,
+    *,
+    user: User,
+    profile_name: str,
+) -> None:
+    lang = user.language_code if user.language_code in {"ru", "it"} else "ru"
+    extra = _channel_line(settings, lang)
+    name = html.escape(profile_name, quote=False)
+    if lang == "it":
+        text = (
+            f"Il profilo <b>{name}</b> è stato eliminato perché non è stato pagato entro 30 giorni. "
+            f"Puoi compilarne uno nuovo.{extra}"
+        )
+    else:
+        text = (
+            f"Анкета <b>{name}</b> удалена: публикация не была оплачена за 30 дней. "
+            f"Можно заполнить заново.{extra}"
+        )
+    try:
+        await send_message(settings, user.telegram_id, text, disable_link_preview=True)
+    except Exception:
+        logger.exception("Failed unpaid-deleted notify for %s", user.telegram_id)
 
 
 async def notify_user_profile_deleted(
@@ -550,3 +629,137 @@ async def notify_referrer_joined(
         )
     except Exception:
         logger.exception("Failed referral notify %s", referrer.telegram_id)
+
+
+async def notify_match(
+    settings: Settings,
+    *,
+    a: User,
+    b: User,
+    liked_profile: Profile,
+    viewer_profile: Profile | None,
+) -> None:
+    async def _one(user: User, other: User, other_name: str) -> None:
+        lang = user.language_code if user.language_code in {"ru", "it"} else "ru"
+        name = html.escape(other_name or other.telegram_first_name or "—")
+        if lang == "it":
+            text = f"❤️ È un match con <b>{name}</b>!\nAprite i profili nel catalogo."
+            btn = "Apri catalogo"
+        else:
+            text = f"❤️ У вас взаимная симпатия с <b>{name}</b>!\nОткройте анкеты в каталоге."
+            btn = "Открыть каталог"
+        start = f"catalog_{liked_profile.id if user.id == a.id else (viewer_profile.id if viewer_profile else liked_profile.id)}"
+        try:
+            await send_message(
+                settings,
+                user.telegram_id,
+                text,
+                reply_markup=_webapp_button(_app_link(settings, start), btn),
+            )
+        except Exception:
+            logger.exception("Failed match notify %s", user.telegram_id)
+
+    await _one(a, b, liked_profile.name)
+    await _one(b, a, viewer_profile.name if viewer_profile else (a.telegram_first_name or "—"))
+
+
+async def notify_legacy_invite(settings: Settings, *, anketa: LegacyAnketa, link: str) -> None:
+    nick = (anketa.telegram_username or "").strip().lstrip("@")
+    text = (
+        f"📩 Старая анкета: {anketa.name}\n"
+        f"Инвайт в Mini App:\n{link}"
+    )
+    if nick:
+        # Cannot DM without knowing telegram_id; admins get the link to forward.
+        text = f"@{nick}\n" + text
+    for admin_id in settings.admin_ids:
+        try:
+            await send_message(settings, admin_id, text, parse_mode=None)
+        except Exception:
+            logger.exception("Failed legacy invite notify admin %s", admin_id)
+
+
+async def notify_initiator_chat_opened(
+    settings: Settings,
+    *,
+    initiator: User,
+    request: MessageRequest,
+) -> None:
+    lang = initiator.language_code if initiator.language_code in {"ru", "it"} else "ru"
+    profile_name = request.profile.name if request.profile else "—"
+    app_url = _app_link(settings, f"chat_{request.id}")
+    if lang == "it":
+        text = (
+            f"✨ <b>{html.escape(profile_name)}</b> ti ha risposto.\n\n"
+            "Con l’abbonamento illimitato la chat è già aperta."
+        )
+        btn = "Apri chat"
+    else:
+        text = (
+            f"✨ Вам ответил(а) <b>{html.escape(profile_name)}</b>.\n\n"
+            "С безлимитом чат уже открыт."
+        )
+        btn = "Открыть чат"
+    try:
+        await send_message(
+            settings,
+            initiator.telegram_id,
+            text,
+            reply_markup=_webapp_button(app_url, btn),
+        )
+    except Exception:
+        logger.exception("Failed to notify initiator %s about opened chat", initiator.telegram_id)
+
+
+async def notify_verification_result(
+    settings: Settings,
+    *,
+    user: User,
+    profile: Profile,
+    approved: bool,
+    feedback: str | None = None,
+) -> None:
+    lang = user.language_code if user.language_code in {"ru", "it"} else "ru"
+    if approved:
+        text = (
+            "✅ Il tuo profilo è verificato. In catalogo compare il badge."
+            if lang == "it"
+            else "✅ Анкета подтверждена. В каталоге появится значок."
+        )
+    else:
+        extra = html.escape((feedback or "").strip())
+        if lang == "it":
+            text = "❌ Verifica non accettata. Carica un selfie più nitido."
+            if extra:
+                text += f"\n{extra}"
+        else:
+            text = "❌ Проверку не приняли. Загрузите более чёткое селфи."
+            if extra:
+                text += f"\n{extra}"
+    try:
+        await send_message(settings, user.telegram_id, text)
+    except Exception:
+        logger.exception("Failed verification notify %s", user.telegram_id)
+
+
+async def notify_unlimited_queued(
+    settings: Settings,
+    *,
+    user: User,
+    profile: Profile,
+) -> None:
+    lang = user.language_code if user.language_code in {"ru", "it"} else "ru"
+    if lang == "it":
+        text = (
+            f"✅ Profilo <b>{html.escape(profile.name)}</b> approvato.\n"
+            "Con l’abbonamento illimitato entra in coda e in cima al catalogo, senza fattura extra."
+        )
+    else:
+        text = (
+            f"✅ Анкета <b>{html.escape(profile.name)}</b> одобрена.\n"
+            "С безлимитом она в очереди и в топе каталога — без отдельного счёта."
+        )
+    try:
+        await send_message(settings, user.telegram_id, text)
+    except Exception:
+        logger.exception("Failed unlimited-queued notify %s", user.telegram_id)

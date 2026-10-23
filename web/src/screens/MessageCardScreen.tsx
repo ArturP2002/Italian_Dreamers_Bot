@@ -244,7 +244,16 @@ export function MessageCardScreen({ language, onCreditsChange }: Props) {
               {t(language, "unlockTitle")}
             </h2>
             <p className="work-body">{t(language, "unlockHint")}</p>
-            {item.message_credits >= 1 ? (
+            {item.has_unlimited ? (
+              <button
+                type="button"
+                className="btn btn--block btn--dark"
+                disabled={busy}
+                onClick={() => void onUnlock()}
+              >
+                {t(language, "unlockUnlimited")}
+              </button>
+            ) : item.message_credits >= 1 ? (
               <button
                 type="button"
                 className="btn btn--block btn--dark"
@@ -254,6 +263,8 @@ export function MessageCardScreen({ language, onCreditsChange }: Props) {
                 {tf(language, "unlockWithCredit", { n: item.message_credits })}
               </button>
             ) : null}
+            {!item.has_unlimited ? (
+            <>
             <button
               type="button"
               className="btn btn--block btn--champagne"
@@ -275,6 +286,8 @@ export function MessageCardScreen({ language, onCreditsChange }: Props) {
                 stars: config?.prices.message_pack_10_stars ?? "—",
               })}
             </button>
+            </>
+            ) : null}
           </div>
         ) : null}
 

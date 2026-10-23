@@ -28,9 +28,11 @@ from app.services.messages import (
     send_chat_message,
     unlock_with_credit,
 )
+from app.services.entitlements import has_unlimited
 from app.services.payments import create_credit_payment, send_credit_invoice
 from app.services.profiles import get_user_profile
 from app.services.referrals import claim_referral, count_invited, ensure_referral_code, referral_link
+from app.services.vision import photo_has_person
 
 router = APIRouter(tags=["messages"])
 
@@ -76,6 +78,7 @@ class MessageRequestOut(BaseModel):
     can_unlock: bool
     can_chat: bool
     message_credits: int
+    has_unlimited: bool = False
 
 
 class InboxOut(BaseModel):
@@ -204,6 +207,9 @@ def _raise_service(exc: MessageServiceError) -> None:
         "pending_limit": status.HTTP_429_TOO_MANY_REQUESTS,
         "rate_hour": status.HTTP_429_TOO_MANY_REQUESTS,
         "rate_day": status.HTTP_429_TOO_MANY_REQUESTS,
+        "photo_required": status.HTTP_400_BAD_REQUEST,
+        "photo_not_confirmed": status.HTTP_400_BAD_REQUEST,
+        "no_person": status.HTTP_400_BAD_REQUEST,
         "contact_forbidden": status.HTTP_400_BAD_REQUEST,
         "text_short": status.HTTP_400_BAD_REQUEST,
         "text_long": status.HTTP_400_BAD_REQUEST,
@@ -217,7 +223,7 @@ def _raise_service(exc: MessageServiceError) -> None:
     raise HTTPException(status_code=mapping.get(exc.code, 400), detail={"code": exc.code, "message": exc.message})
 
 
-def _serialize_request(mr: MessageRequest, viewer: User) -> MessageRequestOut:
+def _serialize_request(mr: MessageRequest, viewer: User, *, has_unlimited: bool = False) -> MessageRequestOut:
     profile = mr.profile
     is_incoming = bool(profile and profile.user_id == viewer.id)
     direction = "incoming" if is_incoming else "outgoing"
@@ -240,6 +246,8 @@ def _serialize_request(mr: MessageRequest, viewer: User) -> MessageRequestOut:
         MessageRequestStatus.UNLOCKED.value,
         MessageRequestStatus.CHATTING.value,
     }
+    if not can_chat:
+        counterpart_username = None
     return MessageRequestOut(
         id=mr.id,
         status=status_val,
@@ -258,7 +266,7 @@ def _serialize_request(mr: MessageRequest, viewer: User) -> MessageRequestOut:
         profile_city=profile.city if profile else None,
         profile_about=profile.about if profile else None,
         counterpart_username=counterpart_username,
-        counterpart_telegram_link=_tg_link(counterpart_username),
+        counterpart_telegram_link=_tg_link(counterpart_username) if can_chat else None,
         profile_deleted=mr.profile_deleted_at is not None,
         unlocked_at=mr.unlocked_at,
         created_at=mr.created_at,
@@ -271,7 +279,13 @@ def _serialize_request(mr: MessageRequest, viewer: User) -> MessageRequestOut:
         ),
         can_chat=can_chat,
         message_credits=viewer.message_credits,
+        has_unlimited=has_unlimited,
     )
+
+
+async def _out(session: AsyncSession, mr: MessageRequest, viewer: User) -> MessageRequestOut:
+    unlimited = await has_unlimited(session, viewer.id)
+    return _serialize_request(mr, viewer, has_unlimited=unlimited)
 
 
 @router.get("/messages/inbox", response_model=InboxOut)
@@ -281,8 +295,9 @@ async def get_inbox(
 ) -> InboxOut:
     items = await list_inbox(session, auth.user)
     pending = await inbox_pending_count(session, auth.user)
+    unlimited = await has_unlimited(session, auth.user.id)
     return InboxOut(
-        items=[_serialize_request(mr, auth.user) for mr in items],
+        items=[_serialize_request(mr, auth.user, has_unlimited=unlimited) for mr in items],
         pending_incoming=pending,
         message_credits=auth.user.message_credits,
     )
@@ -296,7 +311,7 @@ async def write_target(
 ) -> WriteTargetOut:
     profile = await get_published_profile(session, profile_id)
     if profile is None:
-        raise HTTPException(status_code=404, detail="Profile not found or not published")
+        raise HTTPException(status_code=404, detail="Profile not found or not in catalog")
     photo = None
     if profile.photos:
         first = sorted(profile.photos, key=lambda p: p.position)[0]
@@ -329,6 +344,7 @@ async def create_letter(
     text: str = Form(...),
     sender_name: str | None = Form(None),
     sender_age: int | None = Form(None),
+    photo_is_mine: str = Form("false"),
     photo: UploadFile | None = File(None),
     auth: AuthContext = Depends(get_auth_context),
     session: AsyncSession = Depends(get_session),
@@ -338,9 +354,11 @@ async def create_letter(
         raise HTTPException(status_code=403, detail="Blocked")
     profile = await get_published_profile(session, profile_id)
     if profile is None:
-        raise HTTPException(status_code=404, detail="Profile not found or not published")
+        raise HTTPException(status_code=404, detail="Profile not found or not in catalog")
 
     photo_file_id: str | None = None
+    uploaded = False
+    photo_confirmed = (photo_is_mine or "").strip().lower() in {"1", "true", "yes", "on"}
     if photo is not None and photo.filename:
         content_type = (photo.content_type or "").lower()
         if content_type not in ALLOWED_IMAGE_TYPES:
@@ -348,6 +366,22 @@ async def create_letter(
         raw = await photo.read()
         if len(raw) > 8 * 1024 * 1024:
             raise HTTPException(status_code=400, detail="Image too large")
+        if not photo_confirmed:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "photo_not_confirmed", "message": "Confirm the photo is yours"},
+            )
+        has_person = await photo_has_person(
+            raw,
+            mime=content_type if content_type.startswith("image/") else "image/jpeg",
+            api_key=settings.translation_api_key,
+            model=settings.openai_vision_model,
+        )
+        if not has_person:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "no_person", "message": "Photo must show a person"},
+            )
         ext = "jpg"
         if "png" in content_type:
             ext = "png"
@@ -357,11 +391,13 @@ async def create_letter(
         dest = MEDIA_ROOT / name
         dest.write_bytes(raw)
         photo_file_id = f"local:letters/{name}"
+        uploaded = True
 
     identity = await _resolve_sender_identity(session, auth.user)
     if identity is not None:
         name_value, age_value = identity.name, identity.age
-        photo_file_id = photo_file_id or identity.photo_file_id
+        if not uploaded:
+            photo_file_id = identity.photo_file_id
     else:
         name_value = (sender_name or "").strip()
         if not name_value or len(name_value) > STATED_NAME_MAX:
@@ -373,6 +409,12 @@ async def create_letter(
                 status_code=400, detail={"code": "age_invalid", "message": "Invalid sender age"}
             )
         age_value = sender_age
+
+    if not photo_file_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "photo_required", "message": "Your photo is required"},
+        )
 
     try:
         mr = await create_message_request(
@@ -388,7 +430,7 @@ async def create_letter(
         )
     except MessageServiceError as exc:
         _raise_service(exc)
-    return _serialize_request(mr, auth.user)
+    return await _out(session, mr, auth.user)
 
 
 @router.get("/messages/{request_id}", response_model=MessageRequestOut)
@@ -400,7 +442,7 @@ async def get_letter(
     mr = await get_message_request(session, request_id, for_user=auth.user)
     if mr is None:
         raise HTTPException(status_code=404, detail="Not found")
-    return _serialize_request(mr, auth.user)
+    return await _out(session, mr, auth.user)
 
 
 @router.post("/messages/{request_id}/reject", response_model=MessageRequestOut)
@@ -417,7 +459,7 @@ async def reject_letter(
         mr = await reject_message_request(session, settings, mr=mr, actor=auth.user)
     except MessageServiceError as exc:
         _raise_service(exc)
-    return _serialize_request(mr, auth.user)
+    return await _out(session, mr, auth.user)
 
 
 @router.post("/messages/{request_id}/reply", response_model=MessageRequestOut)
@@ -437,7 +479,7 @@ async def reply_letter(
         )
     except MessageServiceError as exc:
         _raise_service(exc)
-    return _serialize_request(mr, auth.user)
+    return await _out(session, mr, auth.user)
 
 
 @router.post("/messages/{request_id}/unlock", response_model=MessageRequestOut)
@@ -455,7 +497,7 @@ async def unlock_letter(
     except MessageServiceError as exc:
         _raise_service(exc)
     await session.refresh(auth.user)
-    return _serialize_request(mr, auth.user)
+    return await _out(session, mr, auth.user)
 
 
 @router.post("/messages/buy-credits")
@@ -511,6 +553,9 @@ async def get_chat(
             or (mr.profile.user.telegram_username if mr.profile and mr.profile.user else None)
         )
         link = _tg_link(uname)
+    can_send = mr.profile is not None
+    if not can_send:
+        link = None
     return ChatOut(
         request_id=mr.id,
         status=mr.status,

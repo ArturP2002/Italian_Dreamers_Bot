@@ -5,13 +5,17 @@ import {
   adminActivateAdNow,
   adminApproveAd,
   adminApproveProfile,
+  adminAssignSlot,
   adminBlockUser,
   adminFetchAd,
   adminFetchAds,
   adminFetchComplaints,
+  adminFetchCredits,
   adminFetchPayments,
   adminFetchProfile,
   adminFetchProfiles,
+  adminFetchRejectPresets,
+  adminFetchSlots,
   adminFetchStats,
   adminFetchTakedowns,
   adminFetchUsers,
@@ -23,20 +27,25 @@ import {
   adminRejectProfile,
   adminResolveComplaint,
   adminScheduleProfile,
+  adminSwapSlots,
   adminTakeDownProfile,
   adminUnblockUser,
   mediaUrl,
   type AdminAd,
   type AdminComplaint,
+  type AdminCreditEntry,
   type AdminPayment,
   type AdminProfileDetail,
   type AdminProfileListItem,
+  type AdminRejectPreset,
+  type AdminSlotDay,
   type AdminStats,
   type AdminTakedown,
   type AdminTakedownResult,
   type AdminUser,
 } from "../lib/api";
 import { APP_TIME_ZONE, toAppZoneInputValue } from "../lib/time";
+import { AdminWave3Panel } from "./AdminWave3Panel";
 
 type Props = { language: Language };
 
@@ -44,12 +53,19 @@ type Tab =
   | "new"
   | "queue"
   | "published"
+  | "slots"
   | "takedowns"
   | "ads"
   | "complaints"
   | "users"
   | "payments"
-  | "stats";
+  | "stats"
+  | "verify"
+  | "legacy"
+  | "comments"
+  | "reports";
+
+type StatsPeriod = "today" | "week" | "month" | "lifetime";
 
 const AD_CATEGORY_RU: Record<string, string> = {
   restaurants: "рестораны",
@@ -82,16 +98,21 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "new", label: "Новые" },
   { id: "queue", label: "Очередь" },
   { id: "published", label: "Опубликованы" },
+  { id: "slots", label: "Слоты" },
   { id: "takedowns", label: "Сняты" },
   { id: "ads", label: "Реклама" },
   { id: "complaints", label: "Жалобы" },
   { id: "users", label: "Пользователи" },
   { id: "payments", label: "Платежи" },
   { id: "stats", label: "Статистика" },
+  { id: "verify", label: "✓" },
+  { id: "legacy", label: "Старые" },
+  { id: "comments", label: "Комменты" },
+  { id: "reports", label: "Отчёт" },
 ];
 
 /** Page size for admin profile lists (Новые / Очередь / Опубликованы) and the takedown journal. */
-const PROFILE_PAGE_SIZE = 10;
+const PROFILE_PAGE_SIZE = 50;
 /** Page size for admin users list. */
 const USER_PAGE_SIZE = 10;
 
@@ -245,6 +266,8 @@ function paymentProductRu(product: string): string {
     message_pack_10: "пакет из 10 писем",
     profile_publish: "публикация анкеты",
     ad_slot: "реклама",
+    unlimited_sub: "безлимит",
+    catalog_top: "топ каталога",
   };
   return map[product] ?? product;
 }
@@ -284,6 +307,19 @@ export function AdminScreen({ language }: Props) {
   const [takedownsHasMore, setTakedownsHasMore] = useState(false);
   const [takedownsLoadingMore, setTakedownsLoadingMore] = useState(false);
   const [stats, setStats] = useState<AdminStats | null>(null);
+  const [statsPeriod, setStatsPeriod] = useState<StatsPeriod>("today");
+  const [filterGender, setFilterGender] = useState("");
+  const [filterAgeMin, setFilterAgeMin] = useState("");
+  const [filterAgeMax, setFilterAgeMax] = useState("");
+  const [filterNick, setFilterNick] = useState<"all" | "yes" | "no">("all");
+  const [presets, setPresets] = useState<AdminRejectPreset[]>([]);
+  const [credits, setCredits] = useState<AdminCreditEntry[]>([]);
+  const [slotDay, setSlotDay] = useState<AdminSlotDay | null>(null);
+  const [slotDate, setSlotDate] = useState(() =>
+    new Date().toLocaleDateString("en-CA", { timeZone: APP_TIME_ZONE }),
+  );
+  const [slotPick, setSlotPick] = useState<number | null>(null);
+  const [queuedForSlots, setQueuedForSlots] = useState<AdminProfileListItem[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selectedAdId, setSelectedAdId] = useState<number | null>(null);
   const [detail, setDetail] = useState<AdminProfileDetail | null>(null);
@@ -353,10 +389,21 @@ export function AdminScreen({ language }: Props) {
         const page = await adminFetchProfiles(tab, {
           limit: PROFILE_PAGE_SIZE,
           offset: 0,
+          gender: filterGender || undefined,
+          ageMin: filterAgeMin ? Number(filterAgeMin) : null,
+          ageMax: filterAgeMax ? Number(filterAgeMax) : null,
+          hasUsername: filterNick === "all" ? null : filterNick === "yes",
         });
         setItems(page.items);
         setProfilesTotal(page.total);
         setProfilesHasMore(page.has_more);
+      } else if (tab === "slots") {
+        const [day, queued] = await Promise.all([
+          adminFetchSlots(slotDate),
+          adminFetchProfiles("queued", { limit: 50, offset: 0 }),
+        ]);
+        setSlotDay(day);
+        setQueuedForSlots(queued.items.filter((p) => p.status === "queued"));
       } else if (tab === "ads") {
         setAds(await adminFetchAds(adFilter === "all" ? undefined : adFilter));
       } else if (tab === "takedowns") {
@@ -374,12 +421,12 @@ export function AdminScreen({ language }: Props) {
       } else if (tab === "payments") {
         setPayments(await adminFetchPayments());
       } else if (tab === "stats") {
-        setStats(await adminFetchStats());
+        setStats(await adminFetchStats(statsPeriod));
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Load failed");
     }
-  }, [tab, query, adFilter]);
+  }, [tab, query, adFilter, filterGender, filterAgeMin, filterAgeMax, filterNick, slotDate, statsPeriod]);
 
   const loadMoreProfiles = async () => {
     if (profilesLoadingMore || !profilesHasMore) return;
@@ -390,6 +437,10 @@ export function AdminScreen({ language }: Props) {
       const page = await adminFetchProfiles(tab, {
         limit: PROFILE_PAGE_SIZE,
         offset: items.length,
+        gender: filterGender || undefined,
+        ageMin: filterAgeMin ? Number(filterAgeMin) : null,
+        ageMax: filterAgeMax ? Number(filterAgeMax) : null,
+        hasUsername: filterNick === "all" ? null : filterNick === "yes",
       });
       setItems((prev) => {
         const seen = new Set(prev.map((i) => i.id));
@@ -450,6 +501,10 @@ export function AdminScreen({ language }: Props) {
   }, [loadList]);
 
   useEffect(() => {
+    void adminFetchRejectPresets().then(setPresets);
+  }, []);
+
+  useEffect(() => {
     if (selectedId == null) {
       setDetail(null);
       return;
@@ -458,6 +513,8 @@ export function AdminScreen({ language }: Props) {
       const d = await adminFetchProfile(selectedId);
       setDetail(d);
       syncScheduleLocal(d);
+      if (d) setCredits(await adminFetchCredits(d.user_id));
+      else setCredits([]);
     })();
   }, [selectedId]);
 
@@ -601,6 +658,47 @@ export function AdminScreen({ language }: Props) {
         </div>
       ) : null}
 
+      {isProfileTab(tab) && selectedId == null ? (
+        <div className="admin-search-row admin-filters" role="group" aria-label="Фильтры анкет">
+          {(["", "female", "male"] as const).map((g) => (
+            <button
+              key={g || "all"}
+              type="button"
+              className={`admin-btn admin-filter${filterGender === g ? " is-active" : ""}`}
+              onClick={() => setFilterGender(g)}
+            >
+              {g === "" ? "Все" : g === "female" ? "Женщины" : "Мужчины"}
+            </button>
+          ))}
+          {(["all", "yes", "no"] as const).map((n) => (
+            <button
+              key={n}
+              type="button"
+              className={`admin-btn admin-filter${filterNick === n ? " is-active" : ""}`}
+              onClick={() => setFilterNick(n)}
+            >
+              {n === "all" ? "Ник любой" : n === "yes" ? "Есть ник" : "Нет ника"}
+            </button>
+          ))}
+          <input
+            className="admin-input"
+            style={{ width: 64 }}
+            inputMode="numeric"
+            placeholder="от"
+            value={filterAgeMin}
+            onChange={(e) => setFilterAgeMin(e.target.value.replace(/\D/g, "").slice(0, 2))}
+          />
+          <input
+            className="admin-input"
+            style={{ width: 64 }}
+            inputMode="numeric"
+            placeholder="до"
+            value={filterAgeMax}
+            onChange={(e) => setFilterAgeMax(e.target.value.replace(/\D/g, "").slice(0, 2))}
+          />
+        </div>
+      ) : null}
+
       {tab === "ads" && selectedAdId == null ? (
         <div className="admin-search-row admin-filters" role="group" aria-label="Фильтр заявок">
           {AD_FILTERS.map((f) => (
@@ -630,7 +728,11 @@ export function AdminScreen({ language }: Props) {
             {detail.name}, {detail.age}
           </h2>
           <p className="admin-meta">
-            {statusRu(detail.status)} · @{detail.telegram_username || "—"} · ID {detail.user_telegram_id}
+            {statusRu(detail.status)} ·{" "}
+            {detail.has_username === false || !detail.telegram_username
+              ? "⚠️ нет ника"
+              : `@${detail.telegram_username}`}{" "}
+            · ID {detail.user_telegram_id}
           </p>
           <p className="admin-meta">
             {detail.city}, {detail.country} · {detail.profession}
@@ -694,6 +796,21 @@ export function AdminScreen({ language }: Props) {
               >
                 Одобрить → оплата
               </button>
+              {presets.length ? (
+                <div className="admin-presets">
+                  {presets.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      className="admin-btn admin-filter"
+                      disabled={busy}
+                      onClick={() => setFeedback(p.text)}
+                    >
+                      {p.id}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               <textarea
                 className="admin-input admin-textarea"
                 placeholder="Причина отклонения"
@@ -893,15 +1010,27 @@ export function AdminScreen({ language }: Props) {
                 className="admin-btn"
                 disabled={busy}
                 onClick={() =>
-                  void run(
-                    () => adminGrantCredits(detail.user_id, Number(creditsDelta) || 0),
-                    "Кредиты обновлены",
-                  )
+                  void run(async () => {
+                    const user = await adminGrantCredits(detail.user_id, Number(creditsDelta) || 0);
+                    setCredits(await adminFetchCredits(detail.user_id));
+                    return user;
+                  }, "Кредиты обновлены")
                 }
               >
                 Начислить
               </button>
             </div>
+            {credits.length ? (
+              <ul className="admin-credits">
+                {credits.slice(0, 20).map((c) => (
+                  <li key={c.id}>
+                    {c.delta > 0 ? "+" : ""}
+                    {c.delta} · {c.entry_type}
+                    {c.note ? ` · ${c.note}` : ""} · {formatDt(c.created_at)} · остаток {c.balance_after}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
             {detail.is_blocked ? (
               <button
                 type="button"
@@ -1047,6 +1176,86 @@ export function AdminScreen({ language }: Props) {
         </article>
       ) : null}
 
+      {tab === "slots" ? (
+        <div className="admin-actions">
+          <input
+            type="date"
+            className="admin-input admin-input--date"
+            value={slotDate}
+            onChange={(e) => setSlotDate(e.target.value)}
+          />
+          <p className="admin-meta">5♀ + 5♂, свободные слоты дня уходят другому полу. Нажмите два слота, чтобы поменять местами.</p>
+          <ul className="admin-list">
+            {(slotDay?.items ?? []).map((slot) => (
+              <li key={slot.id}>
+                <div className={`admin-slot${slotPick === slot.id ? " is-selected" : ""}`}>
+                  <div>
+                    <div className="admin-slot__time">{slot.time_local}</div>
+                    <div className="admin-slot__meta">{slot.gender === "female" ? "♀ квота" : "♂ квота"}</div>
+                  </div>
+                  <button
+                    type="button"
+                    className="admin-linkish"
+                    onClick={() => {
+                      if (slotPick && slotPick !== slot.id) {
+                        void run(() => adminSwapSlots(slotPick, slot.id), "Слоты поменяли");
+                        setSlotPick(null);
+                        return;
+                      }
+                      setSlotPick(slotPick === slot.id ? null : slot.id);
+                    }}
+                  >
+                    {slot.profile ? (
+                      <>
+                        <strong>
+                          {slot.profile.name}, {slot.profile.age}
+                        </strong>
+                        <span className="admin-slot__meta">{statusRu(slot.profile.status)}</span>
+                      </>
+                    ) : (
+                      <span className="admin-slot__meta">свободно</span>
+                    )}
+                  </button>
+                  <div>
+                    {slot.profile ? (
+                      <button
+                        type="button"
+                        className="admin-btn"
+                        disabled={busy}
+                        onClick={() =>
+                          void run(() => adminAssignSlot(slot.id, null), "Слот освобождён")
+                        }
+                      >
+                        Снять
+                      </button>
+                    ) : (
+                      <select
+                        className="admin-input"
+                        defaultValue=""
+                        disabled={busy}
+                        onChange={(e) => {
+                          const id = Number(e.target.value);
+                          if (id) void run(() => adminAssignSlot(slot.id, id), "Слот назначен");
+                        }}
+                      >
+                        <option value="">назначить…</option>
+                        {queuedForSlots
+                          .filter((p) => !slotDay?.items.some((s) => s.profile_id === p.id))
+                          .map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}, {p.age}
+                            </option>
+                          ))}
+                      </select>
+                    )}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       {selectedId == null &&
       selectedAdId == null &&
       isProfileTab(tab) ? (
@@ -1068,7 +1277,11 @@ export function AdminScreen({ language }: Props) {
                     <span>
                       {statusRu(item.status)} · {item.city}
                     </span>
-                    <span>@{item.telegram_username || "—"}</span>
+                    <span>
+                      {item.has_username === false || !item.telegram_username
+                        ? "⚠️ нет ника"
+                        : `@${item.telegram_username}`}
+                    </span>
                   </div>
                 </button>
               </li>
@@ -1293,6 +1506,46 @@ export function AdminScreen({ language }: Props) {
 
       {tab === "stats" && stats ? (
         <div className="admin-stats">
+          <div className="admin-search-row admin-filters" style={{ gridColumn: "1 / -1" }}>
+            {(["today", "week", "month", "lifetime"] as const).map((p) => (
+              <button
+                key={p}
+                type="button"
+                className={`admin-btn admin-filter${statsPeriod === p ? " is-active" : ""}`}
+                onClick={() => setStatsPeriod(p)}
+              >
+                {p === "today" ? "Сегодня" : p === "week" ? "Неделя" : p === "month" ? "Месяц" : "Всё время"}
+              </button>
+            ))}
+          </div>
+          <div>
+            <strong>{stats.funnel_submitted ?? 0}</strong>
+            <span>воронка: отправлено</span>
+          </div>
+          <div>
+            <strong>{stats.funnel_approved ?? 0}</strong>
+            <span>воронка: одобрено</span>
+          </div>
+          <div>
+            <strong>{stats.funnel_paid ?? 0}</strong>
+            <span>воронка: оплачено</span>
+          </div>
+          <div>
+            <strong>{stats.funnel_published ?? 0}</strong>
+            <span>воронка: в канале</span>
+          </div>
+          <div>
+            <strong>{stats.letters_new ?? 0}</strong>
+            <span>писем за период</span>
+          </div>
+          <div>
+            <strong>{stats.letters_replied_period ?? 0}</strong>
+            <span>ответов за период</span>
+          </div>
+          <div>
+            <strong>{stats.letters_unlocked_period ?? 0}</strong>
+            <span>открыто знакомств</span>
+          </div>
           <div>
             <strong>{stats.profiles_new}</strong>
             <span>анкеты на модерации</span>
@@ -1362,6 +1615,10 @@ export function AdminScreen({ language }: Props) {
             <span>временно ограничены</span>
           </div>
         </div>
+      ) : null}
+
+      {tab === "verify" || tab === "legacy" || tab === "comments" || tab === "reports" ? (
+        <AdminWave3Panel tab={tab} />
       ) : null}
         </>
       )}
