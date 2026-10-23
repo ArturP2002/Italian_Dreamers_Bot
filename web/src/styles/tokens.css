@@ -111,6 +111,12 @@ a {
   border-color: rgba(239, 228, 210, 0.45);
 }
 
+.btn--outline {
+  background: #fff;
+  color: var(--color-graphite);
+  border-color: var(--color-champagne);
+}
+
 .btn--champagne {
   background: var(--color-champagne);
   color: var(--color-graphite);

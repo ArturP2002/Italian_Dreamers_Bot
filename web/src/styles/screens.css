@@ -237,7 +237,7 @@
 .home-meta {
   margin-top: 18px;
   font-size: 13px;
-  color: var(--color-secondary);
+  color: rgba(26, 21, 17, 0.62);
   line-height: 1.5;
 }
 
@@ -268,6 +268,12 @@
   font-size: 13px;
   line-height: 1.4;
   color: rgba(239, 228, 210, 0.85);
+}
+
+.screen--milky .btn--ghost {
+  background: #fff;
+  color: var(--color-graphite);
+  border-color: rgba(26, 21, 17, 0.22);
 }
 
 /* ——— Profile wizard ——— */
@@ -1177,6 +1183,10 @@
   padding: 12px;
 }
 
+.screen--milky .admin-empty {
+  color: rgba(26, 21, 17, 0.55);
+}
+
 .admin-payment {
   background: var(--color-card);
   color: rgba(239, 228, 210, 0.75);
@@ -1299,6 +1309,13 @@
   color: rgba(239, 228, 210, 0.7);
   font-size: 13px;
   line-height: 1.4;
+}
+
+.admin-hint {
+  margin: 4px 0 10px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(26, 21, 17, 0.72);
 }
 
 .admin-section-label {
@@ -1608,8 +1625,9 @@
 }
 
 .letter-card .btn--ghost {
+  background: #fff;
   color: var(--color-graphite);
-  border-color: rgba(26, 21, 17, 0.2);
+  border-color: rgba(26, 21, 17, 0.22);
   text-align: center;
   text-decoration: none;
 }
@@ -2002,7 +2020,7 @@
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  color: var(--color-secondary);
+  color: rgba(26, 21, 17, 0.62);
 }
 
 .catalog-age .admin-input {
@@ -2068,6 +2086,13 @@
   aspect-ratio: 3 / 4;
   object-fit: cover;
   border-radius: 12px;
+}
+
+.catalog-detail-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 20px;
 }
 
 .catalog-card {

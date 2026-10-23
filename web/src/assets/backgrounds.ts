@@ -24,6 +24,8 @@ export const homeAssets = {
   matches: "/photos/home_matches_spb_winter_couple.jpg",
   profile: "/photos/home_profile_rome_night_couple.jpg",
   credits: "/photos/home_credits_snow_girl.jpg",
+  letters: "/photos/guide_read_rome_sunset_kiss.jpg",
+  likes: "/photos/step_city_positano_run.jpg",
 } as const;
 
 /** Guide media by app language. Filenames keep historical gender labels. */

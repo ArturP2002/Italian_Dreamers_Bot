@@ -85,7 +85,7 @@ export function CreditsScreen({ language, onCreditsChange }: Props) {
             </p>
             <button
               type="button"
-              className="btn btn--block btn--ghost"
+              className="btn btn--block btn--outline"
               disabled={busy}
               onClick={() => {
                 void cancelUnlimited().then(() => setInfo(t(language, "invoiceSent")));
@@ -113,7 +113,7 @@ export function CreditsScreen({ language, onCreditsChange }: Props) {
         {!me?.has_unlimited ? (
           <button
             type="button"
-            className="btn btn--block btn--ghost"
+            className="btn btn--block btn--outline"
             disabled={busy}
             onClick={() => {
               setBusy(true);

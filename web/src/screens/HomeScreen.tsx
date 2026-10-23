@@ -126,7 +126,7 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
         </Link>
       ) : (
         <Link to="/inbox" className="home-hero-card">
-          <img className="home-hero-card__bg" src={homeAssets.matches} alt="" />
+          <img className="home-hero-card__bg" src={homeAssets.letters} alt="" />
           <div className="home-hero-card__veil" />
           <div className="home-hero-card__body">
             <span className="home-badge">
@@ -156,13 +156,13 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
           </Link>
         ) : (
           <Link to="/inbox" className="home-tile">
-            <img className="home-tile__bg" src={homeAssets.matches} alt="" />
+            <img className="home-tile__bg" src={homeAssets.letters} alt="" />
             <div className="home-tile__veil" />
             <span className="home-tile__label">{t(language, "homeLettersTitle")}</span>
           </Link>
         )}
         <Link to="/likes" className="home-tile">
-          <img className="home-tile__bg" src={homeAssets.matches} alt="" />
+          <img className="home-tile__bg" src={homeAssets.likes} alt="" />
           <div className="home-tile__veil" />
           <span className="home-tile__label">{t(language, "homeLikes")}</span>
         </Link>

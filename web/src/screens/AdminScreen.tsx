@@ -1184,7 +1184,7 @@ export function AdminScreen({ language }: Props) {
             value={slotDate}
             onChange={(e) => setSlotDate(e.target.value)}
           />
-          <p className="admin-meta">5♀ + 5♂, свободные слоты дня уходят другому полу. Нажмите два слота, чтобы поменять местами.</p>
+          <p className="admin-hint">5♀ + 5♂, свободные слоты дня уходят другому полу. Нажмите два слота, чтобы поменять местами.</p>
           <ul className="admin-list">
             {(slotDay?.items ?? []).map((slot) => (
               <li key={slot.id}>
