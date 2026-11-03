@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { LikeHeart, MatchBanner } from "../components/LikeHeart";
 import { type Language, t } from "../i18n/messages";
 import { fetchCatalog, mediaUrl, toggleCatalogLike, type CatalogCard } from "../lib/api";
 
@@ -148,15 +149,19 @@ export function CatalogScreen({ language }: Props) {
                 {item.name}, {item.age}
               </strong>
               <span>{item.city}</span>
-              {item.already_written ? (
+              {item.matched ? (
+                <em className="catalog-card__match">{t(language, "catalogMatchTitle")}</em>
+              ) : item.already_written ? (
                 <em>{t(language, "catalogAlreadyWritten")}</em>
               ) : item.status === "queued" ? (
                 <em>{t(language, "catalogQueued")}</em>
               ) : null}
             </Link>
-            <button
-              type="button"
-              className={`catalog-like${item.liked ? " is-on" : ""}`}
+            <LikeHeart
+              liked={item.liked}
+              matched={item.matched}
+              className="like-heart--on-photo"
+              aria-label={t(language, "catalogLike")}
               onClick={() => {
                 void toggleCatalogLike(item.id).then((res) => {
                   setItems((prev) =>
@@ -166,9 +171,7 @@ export function CatalogScreen({ language }: Props) {
                   );
                 });
               }}
-            >
-              {item.matched ? "♥" : item.liked ? "❤" : "♡"}
-            </button>
+            />
           </div>
         ))}
       </div>

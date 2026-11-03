@@ -20,12 +20,17 @@ export const profileIntroPhotos = {
   bottom: "/photos/intro_bottom_rome_sunset_couple.jpg",
 } as const;
 
+/** Home screen photo tiles (web/public/photos/home_v2_*). */
 export const homeAssets = {
-  matches: "/photos/home_matches_spb_winter_couple.jpg",
-  profile: "/photos/home_profile_rome_night_couple.jpg",
-  credits: "/photos/home_credits_snow_girl.jpg",
-  letters: "/photos/guide_read_rome_sunset_kiss.jpg",
-  likes: "/photos/step_city_positano_run.jpg",
+  catalog: "/photos/home_v2_catalog_spb_bridge.jpg",
+  messages: "/photos/home_v2_messages_rooftop.jpg",
+  likes: "/photos/home_v2_likes_rome_kiss.jpg",
+  profile: "/photos/home_v2_profile_positano.jpg",
+  credits: "/photos/home_v2_credits_snow.jpg",
+  referral: "/photos/home_v2_referral_winter_kiss.jpg",
+  // legacy aliases used by older screens
+  matches: "/photos/home_v2_catalog_spb_bridge.jpg",
+  letters: "/photos/home_v2_messages_rooftop.jpg",
 } as const;
 
 /** Guide media by app language. Filenames keep historical gender labels. */

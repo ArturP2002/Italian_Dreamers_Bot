@@ -14,6 +14,7 @@ export type MeUser = {
   is_soft_banned: boolean;
   profile_status: string | null;
   profile_id: number | null;
+  profile_scheduled_at?: string | null;
   has_username?: boolean;
   bot_write_access?: boolean;
   has_unlimited?: boolean;
@@ -295,6 +296,7 @@ export type PublicConfig = {
     message_pack_10_stars: number;
     message_pack_size: number;
     profile_publish_stars: number;
+    profile_publish_rub?: number;
     ad_slot_stars: number;
     unlimited_sub_stars?: number;
     catalog_top_stars?: number;

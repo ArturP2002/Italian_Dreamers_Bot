@@ -103,13 +103,13 @@ async def notify_user_profile_rejected(
         text = (
             f"Анкета отклонена / Profilo rifiutato.\n\n"
             f"<b>Cosa correggere:</b>\n{feedback.strip()}\n\n"
-            "Puoi modificare il profilo nell’app e inviarlo di nuovo — senza pagamento."
+            "Puoi modificare il profilo nell’app e inviarlo di nuovo."
         )
     else:
         text = (
             f"Анкета отклонена.\n\n"
             f"<b>Что поправить:</b>\n{feedback.strip()}\n\n"
-            "Исправьте анкету в Mini App и отправьте снова — без оплаты."
+            "Исправьте анкету в Mini App и отправьте снова."
         )
     try:
         await send_message(settings, user.telegram_id, text)

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { LikeHeart, MatchBanner } from "../components/LikeHeart";
 import { type Language, t } from "../i18n/messages";
 import { fetchCatalogProfile, mediaUrl, toggleCatalogLike, type CatalogProfile } from "../lib/api";
 
@@ -32,8 +33,23 @@ export function CatalogProfileScreen({ language }: Props) {
         ← {t(language, "catalogTitle")}
       </Link>
       <div className="catalog-detail-photos">
-        {profile.photo_urls.map((url) => (
-          <img key={url} src={mediaUrl(url)} alt="" />
+        {profile.photo_urls.map((url, index) => (
+          <div key={url} className="catalog-detail-photos__item">
+            <img src={mediaUrl(url)} alt="" />
+            {index === 0 && !profile.is_mine ? (
+              <LikeHeart
+                liked={profile.liked}
+                matched={profile.matched}
+                className="like-heart--on-photo"
+                aria-label={t(language, "catalogLike")}
+                onClick={() => {
+                  void toggleCatalogLike(profile.id).then((res) => {
+                    setProfile({ ...profile, liked: res.liked, matched: res.matched });
+                  });
+                }}
+              />
+            ) : null}
+          </div>
         ))}
       </div>
       <h1 className="work-title">
@@ -49,6 +65,10 @@ export function CatalogProfileScreen({ language }: Props) {
       </p>
       {profile.status === "queued" ? <p className="home-meta">{t(language, "catalogQueued")}</p> : null}
 
+      {profile.matched ? (
+        <MatchBanner title={t(language, "catalogMatchTitle")} hint={t(language, "catalogMatchHint")} />
+      ) : null}
+
       <h2 className="admin-section-label">{t(language, "catalogAbout")}</h2>
       <p className="work-body">{profile.about}</p>
       {profile.hobbies ? <p className="work-body">{profile.hobbies}</p> : null}
@@ -59,7 +79,7 @@ export function CatalogProfileScreen({ language }: Props) {
       <p className="work-body">{profile.desired_partner}</p>
 
       <div className="catalog-detail-actions">
-        {!profile.is_mine ? (
+        {!profile.is_mine && !profile.matched ? (
           <button
             type="button"
             className={`btn btn--block ${profile.liked ? "btn--champagne" : "btn--outline"}`}
@@ -69,11 +89,7 @@ export function CatalogProfileScreen({ language }: Props) {
               });
             }}
           >
-            {profile.matched
-              ? t(language, "catalogMatch")
-              : profile.liked
-                ? t(language, "catalogLiked")
-                : t(language, "catalogLike")}
+            {profile.liked ? t(language, "catalogLiked") : t(language, "catalogLike")}
           </button>
         ) : null}
 

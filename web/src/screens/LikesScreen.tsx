@@ -51,12 +51,12 @@ export function LikesScreen({ language }: Props) {
                 {item.age ? `, ${item.age}` : ""}
               </strong>
               <span>{item.city}</span>
-              {item.matched ? <em>{t(language, "catalogMatch")}</em> : null}
+              {item.matched ? <em className="catalog-card__match">{t(language, "catalogMatchTitle")}</em> : null}
             </Link>
           ) : (
             <div key={`anon-${i}`} className="catalog-card">
               <strong>{item.name}</strong>
-              {item.matched ? <em>{t(language, "catalogMatch")}</em> : null}
+              {item.matched ? <em className="catalog-card__match">{t(language, "catalogMatchTitle")}</em> : null}
             </div>
           ),
         )}

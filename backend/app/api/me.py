@@ -46,6 +46,7 @@ class MeResponse(BaseModel):
     is_soft_banned: bool
     profile_status: str | None
     profile_id: int | None
+    profile_scheduled_at: datetime | None = None
     has_username: bool = False
     bot_write_access: bool = False
     has_unlimited: bool = False
@@ -92,6 +93,7 @@ async def _build_me(auth: AuthContext, session: AsyncSession) -> MeResponse:
         is_soft_banned=is_soft_banned,
         profile_status=profile.status if profile else None,
         profile_id=profile.id if profile else None,
+        profile_scheduled_at=profile.scheduled_at if profile else None,
         has_username=bool((auth.user.telegram_username or "").strip()),
         bot_write_access=bool(auth.user.bot_write_access),
         has_unlimited=sub is not None,

@@ -16,6 +16,7 @@ async def public_config(settings: Settings = Depends(get_settings)) -> dict:
             "message_pack_10_stars": settings.price_message_pack_10_stars,
             "message_pack_size": settings.message_pack_size,
             "profile_publish_stars": settings.price_profile_publish_stars,
+            "profile_publish_rub": settings.price_profile_publish_rub,
             "ad_slot_stars": settings.price_ad_slot_stars,
             "unlimited_sub_stars": settings.price_unlimited_sub_stars,
             "catalog_top_stars": settings.price_catalog_top_stars,

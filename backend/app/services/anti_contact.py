@@ -3,7 +3,7 @@
 Catches phones (also spelled out in words), @handles, links, domains, e-mails and
 mentions of messengers / social networks in RU, IT and EN, including simple
 obfuscation: letters split by spaces, Cyrillic look-alikes inside Latin words,
-digits in place of letters.
+digits in place of letters, «inst : nick» / «тг=nick» style labels.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ _PHONE_RE = re.compile(r"(?:\+|00)?\d[\d\s\-().]{7,}\d")
 PHONE_MIN_DIGITS = 9
 _USERNAME_RE = re.compile(r"(?<!\w)@[A-Za-z0-9_]{4,}")
 _URL_RE = re.compile(
-    r"(?:https?://|www\.|t\.me/|telegram\.me/|wa\.me/)[^\s]+",
+    r"(?:https?://|www\.|t\.me/|telegram\.me/|wa\.me/|instagram\.com/)[^\s]+",
     re.IGNORECASE,
 )
 _DOT_DOMAIN_RE = re.compile(
@@ -24,29 +24,44 @@ _DOT_DOMAIN_RE = re.compile(
 _SPELLED_DOT_RE = re.compile(r"\b(?:dot|точка|punto)\s*(?:com|ru|it|net|org|me)\b")
 # Handle-like token: anna_petrova, anna.petrova_90
 _UNDERSCORE_HANDLE_RE = re.compile(r"(?<![\w@])[a-z0-9]+(?:[._][a-z0-9]+)*_[a-z0-9_.]+")
-# anna1990 — only suspicious next to a "soft" keyword such as telegram / ник
+# anna1990 — only suspicious next to a "soft" keyword such as telegram / ник / inst
 _DIGIT_HANDLE_RE = re.compile(r"(?<![\w@])[a-z][a-z._]{2,}\d{2,}\b")
 
 # Always a contact channel, whatever the context.
 _LATIN_KEYWORDS_RE = re.compile(
-    r"instagram|\binsta(?:gr|gramm?)?\b|\binst\b"
+    r"instagram|\binstagr?amm?\b|\binsta\b|\binst\b|\big\b"
     r"|whats\s?app?|\bwatsapp?\b|\bwhatsap\b|\bwapp\b"
     r"|\bviber\b|\bfacebook\b|\bfb\b|\bsnapchat\b|\btik\s?tok\b|\bskype\b|\bwechat\b"
     r"|\bvk\b|vkontakte|\bsignal\s+app\b"
     r"|\be-?mail\b|\bgmail\b|\bhotmail\b|\byahoo\b|\bicloud\b"
     r"|\bmy\s+number\b|\bphone\s+number\b|\bil\s+mio\s+numero\b|\bnumero\s+di\s+(?:telefono|cellulare)\b"
-    r"|\bscrivimi\s+su\b|\bwrite\s+me\s+on\b"
+    r"|\bscrivimi\s+su\b|\bwrite\s+me\s+on\b|\bfind\s+me\s+on\b|\badd\s+me\s+on\b"
 )
 _CYRILLIC_KEYWORDS_RE = re.compile(
-    r"\bинста(?:грамм?\w*)?\b|\bинст[уеы]\b|\bинстой\b"
+    r"\bинста(?:грамм?\w*)?\b|\bинста\b|\bинст\b|\bинст[уеы]\b|\bинстой\b"
     r"|\bв[оа]тс[ао]пп?\w*|\bв[оа]цап\w*|\bв[аи]й?бер\w*"
     r"|\bтелег[аеуи]\b|\bтелегой\b|\bтг\b"
     r"|\bвк\b|\bвконтакт\w*|\bфейсбук\w*|\bфб\b|\bскайп\w*|\bтик\s?ток\w*|\bсн[эеа]пчат\w*"
     r"|\b[иеэ]?мейл\w*|\bпочт[аеуы]\s+gmail|\bгугл\s?почт\w*|\bпиши(?:те)?\s+(?:мне\s+)?на\s+почту\b"
     r"|\bмой\s+номер\b|\bномер\s+телефона\b|\bмой\s+телефон\b|\bнапиши\s+мне\s+в\b"
+    r"|\bищи\s+меня\s+в\b|\bдобав(?:ь|ляйте)\s+в\b"
 )
-# Mentioned alone this is fine ("нашёл тебя в телеграм-канале", "l'ho visto al tg"), next to a handle it is not.
-_SOFT_KEYWORDS_RE = re.compile(r"telegra|телеграм|\btg\b|\bник\b|\bnick\b|\bnickname\b|\busername\b")
+# Label + separator + nick: «inst : Alena_…», «тг=nick», «ig/nick», «инст.nick»
+_SOCIAL_LABEL_SEP_RE = re.compile(
+    r"(?:instagram|instagr?amm?|insta|inst|ig|"
+    r"инстаграмм?\w*|инста|инст|"
+    r"telegram|телег\w*|тг|tg|"
+    r"whats\s?app?|ватсапп?\w*|wa|"
+    r"viber|вайбер|tik\s?tok|тикток|"
+    r"facebook|fb|snapchat|сн[эеа]пчат\w*)"
+    r"\s*[:/=@.·•|]"
+    r"\s*@?[a-z0-9._]{2,}"
+)
+# Mentioned alone this is fine ("нашёл тебя в телеграм-канале"); next to a handle it is not.
+_SOFT_KEYWORDS_RE = re.compile(
+    r"telegra|телеграм|\btg\b|\bник\b|\bnick\b|\bnickname\b|\busername\b|"
+    r"\binst\b|\binsta\b|instagram|\big\b|\bинст\b|\bинста\b"
+)
 
 _NUMBER_WORD_RE = re.compile(
     r"^(?:ноль|нуль|один|одна|два|две|три|четыре|пять|шесть|семь|восемь|девять|десять"
@@ -60,6 +75,23 @@ SPELLED_PHONE_MIN_TOKENS = 6
 
 # Single characters split by spaces/dots/dashes: "w h a t s a p p", "и-н-с-т-а".
 _SPLIT_LETTERS_RE = re.compile(r"(?<!\w)(?:\w[\s.\-_*·]){3,}\w(?!\w)")
+_INVISIBLE_RE = re.compile(r"[\u200b-\u200f\u202a-\u202e\ufeff\u00ad]")
+_PUNCT_MAP = str.maketrans(
+    {
+        "：": ":",
+        "﹕": ":",
+        "／": "/",
+        "＝": "=",
+        "＠": "@",
+        "․": ".",
+        "‧": ".",
+        "·": ".",
+        "•": ".",
+        "–": "-",
+        "—": "-",
+        "｜": "|",
+    }
+)
 _HOMOGLYPHS = str.maketrans(
     {
         "а": "a", "е": "e", "ё": "e", "о": "o", "р": "p", "с": "c", "у": "y",
@@ -71,6 +103,12 @@ _HOMOGLYPHS = str.maketrans(
 
 def _collapse_split_letters(text: str) -> str:
     return _SPLIT_LETTERS_RE.sub(lambda m: re.sub(r"[\s.\-_*·]", "", m.group(0)), text)
+
+
+def _normalize(text: str) -> str:
+    value = _INVISIBLE_RE.sub("", text.lower().replace("ё", "е"))
+    value = value.translate(_PUNCT_MAP)
+    return _collapse_split_letters(value)
 
 
 def _has_phone(text: str) -> bool:
@@ -93,7 +131,7 @@ def contains_contact_info(text: str) -> bool:
     if _URL_RE.search(value) or _USERNAME_RE.search(value) or _has_phone(value):
         return True
 
-    lowered = _collapse_split_letters(value.lower().replace("ё", "е"))
+    lowered = _normalize(value)
     latinized = lowered.translate(_HOMOGLYPHS)
     if _DOT_DOMAIN_RE.search(lowered) or _SPELLED_DOT_RE.search(lowered):
         return True
@@ -101,8 +139,12 @@ def contains_contact_info(text: str) -> bool:
         return True
     if _LATIN_KEYWORDS_RE.search(lowered) or _LATIN_KEYWORDS_RE.search(latinized):
         return True
+    if _SOCIAL_LABEL_SEP_RE.search(lowered) or _SOCIAL_LABEL_SEP_RE.search(latinized):
+        return True
     if _UNDERSCORE_HANDLE_RE.search(lowered):
         return True
     if _SOFT_KEYWORDS_RE.search(lowered) and _DIGIT_HANDLE_RE.search(lowered):
+        return True
+    if _SOFT_KEYWORDS_RE.search(latinized) and _DIGIT_HANDLE_RE.search(latinized):
         return True
     return _has_spelled_phone(lowered)
