@@ -287,18 +287,41 @@ async def notify_new_letter(
         logger.exception("Failed to notify recipient %s about letter", recipient.telegram_id)
 
 
+def _replied_verb(lang: str, gender: str | None) -> str:
+    if lang == "it":
+        if gender == "female":
+            return "ti ha risposto"
+        if gender == "male":
+            return "ti ha risposto"
+        return "ti ha risposto"
+    if gender == "female":
+        return "ответила"
+    if gender == "male":
+        return "ответил"
+    return "ответил(а)"
+
+
 async def notify_recipient_rejected(
     settings: Settings,
     *,
     initiator: User,
     request: MessageRequest,
+    credit_refunded: bool = False,
 ) -> None:
     lang = initiator.language_code if initiator.language_code in {"ru", "it"} else "ru"
     profile_name = request.profile.name if request.profile else "—"
     if lang == "it":
-        text = f"La lettera a <b>{profile_name}</b> non ha ricevuto interesse. Nessun pagamento."
+        text = f"La lettera a <b>{html.escape(profile_name)}</b> non ha ricevuto interesse."
+        if credit_refunded:
+            text += " Il credito dell’incontro è tornato sul saldo."
+        else:
+            text += " Nessun pagamento."
     else:
-        text = f"Письмо к <b>{profile_name}</b> не заинтересовало. Оплаты нет."
+        text = f"Письмо к <b>{html.escape(profile_name)}</b> не заинтересовало."
+        if credit_refunded:
+            text += " Знакомство вернулось на баланс."
+        else:
+            text += " Оплаты нет."
     try:
         await send_message(settings, initiator.telegram_id, text)
     except Exception:
@@ -313,22 +336,24 @@ async def notify_initiator_pay_to_unlock(
 ) -> None:
     lang = initiator.language_code if initiator.language_code in {"ru", "it"} else "ru"
     profile_name = request.profile.name if request.profile else "—"
+    gender = request.profile.gender if request.profile else None
     app_url = _app_link(settings, f"inbox_{request.id}")
     credits = initiator.message_credits
+    safe_name = html.escape(profile_name)
     if lang == "it":
         text = (
-            f"✨ <b>{profile_name}</b> ti ha risposto.\n\n"
-            f"Per aprire la chat usa 1 credito "
-            f"(saldo: <b>{credits}</b>) oppure compra un pacchetto."
+            f"💌 <b>{safe_name}</b> {_replied_verb(lang, gender)}.\n\n"
+            "Il testo è nascosto. Per aprire di nuovo l’incontro usa 1 credito "
+            f"(saldo: <b>{credits}</b>), paga oppure Dreamers Plus."
         )
-        btn = "Sblocca chat"
+        btn = "Apri incontro"
     else:
         text = (
-            f"✨ Вам ответил(а) <b>{profile_name}</b>.\n\n"
-            f"Чтобы открыть чат — спишите 1 кредит "
-            f"(баланс: <b>{credits}</b>) или купите пакет."
+            f"💌 Вам {_replied_verb(lang, gender)} <b>{safe_name}</b>.\n\n"
+            "Текст скрыт. Чтобы открыть знакомство снова — 1 кредит с баланса "
+            f"(сейчас: <b>{credits}</b>), оплата или Dreamers Plus."
         )
-        btn = "Открыть чат"
+        btn = "Открыть знакомство"
     try:
         await send_message(
             settings,
@@ -338,6 +363,84 @@ async def notify_initiator_pay_to_unlock(
         )
     except Exception:
         logger.exception("Failed to notify initiator %s about reply", initiator.telegram_id)
+
+
+async def notify_letter_expired(
+    settings: Settings,
+    *,
+    request: MessageRequest,
+) -> None:
+    """Sender: credit returned. Recipient: conversation closed until a late reply."""
+    sender = request.sender
+    owner = request.profile.user if request.profile else None
+    profile_name = request.profile.name if request.profile else "—"
+    safe_name = html.escape(profile_name)
+    days = 3
+    app_url = _app_link(settings, f"inbox_{request.id}")
+
+    if sender:
+        lang_s = sender.language_code if sender.language_code in {"ru", "it"} else "ru"
+        if lang_s == "it":
+            text_s = (
+                f"⏱ Nessuna risposta da <b>{safe_name}</b> in {days} giorni.\n"
+                f"L’incontro è tornato sul saldo (ora: <b>{sender.message_credits}</b>). "
+                "La chat è chiusa. Se risponderà più tardi, riceverai una notifica "
+                "e potrai riaprirla."
+            )
+            btn_s = "I miei incontri"
+        else:
+            text_s = (
+                f"⏱ Нет ответа от <b>{safe_name}</b> за {days} дня.\n"
+                f"Знакомство вернулось на баланс (сейчас: <b>{sender.message_credits}</b>). "
+                "Переписка закрыта. Если ответит позже — придёт уведомление, "
+                "и вы сможете открыть её снова."
+            )
+            btn_s = "Мои знакомства"
+        try:
+            await send_message(
+                settings,
+                sender.telegram_id,
+                text_s,
+                reply_markup=_webapp_button(app_url, btn_s),
+            )
+        except Exception:
+            logger.exception("Failed expire notify to sender %s", sender.telegram_id)
+
+    if owner:
+        sender_name = request.sender_name or (sender.telegram_first_name if sender else None) or "—"
+        safe_sender = html.escape(sender_name)
+        lang_o = owner.language_code if owner.language_code in {"ru", "it"} else "ru"
+        owner_gender = request.profile.gender if request.profile else None
+        if lang_o == "it":
+            text_o = (
+                f"⏱ Non hai risposto a <b>{safe_sender}</b> entro {days} giorni: "
+                "la chat è chiusa. Se scrivi ora, riceverà una notifica e potrà "
+                "riaprirla (1 credito, pagamento o Dreamers Plus)."
+            )
+            btn_o = "Apri lettera"
+        else:
+            silent = (
+                "не ответила"
+                if owner_gender == "female"
+                else "не ответил"
+                if owner_gender == "male"
+                else "не ответили"
+            )
+            text_o = (
+                f"⏱ Ты {silent} за {days} дня <b>{safe_sender}</b> — переписка закрылась. "
+                "Если напишешь, он получит уведомление и сможет открыть её снова "
+                "(1 знакомство, оплата или Dreamers Plus)."
+            )
+            btn_o = "Открыть письмо"
+        try:
+            await send_message(
+                settings,
+                owner.telegram_id,
+                text_o,
+                reply_markup=_webapp_button(app_url, btn_o),
+            )
+        except Exception:
+            logger.exception("Failed expire notify to owner %s", owner.telegram_id)
 
 
 def _tg_link(username: str | None) -> str | None:

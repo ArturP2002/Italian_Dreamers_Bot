@@ -1,4 +1,4 @@
-"""Message requests, unlock with credits, Mini App bilingual chat."""
+"""Message requests: pay-at-send, 3-day reply window, unlock after late reply."""
 
 from __future__ import annotations
 
@@ -24,11 +24,11 @@ from app.services.entitlements import has_unlimited
 from app.services.notify import (
     notify_initiator_chat_opened,
     notify_initiator_pay_to_unlock,
+    notify_letter_expired,
     notify_new_letter,
     notify_parties_unlocked,
     notify_recipient_rejected,
 )
-from app.services.translate import translate_text
 
 
 class MessageServiceError(Exception):
@@ -36,6 +36,15 @@ class MessageServiceError(Exception):
         super().__init__(message)
         self.code = code
         self.message = message
+
+
+ACTIVE_PAIR_STATUSES = (
+    MessageRequestStatus.PENDING.value,
+    MessageRequestStatus.REPLIED.value,
+    MessageRequestStatus.UNLOCKED.value,
+    MessageRequestStatus.CHATTING.value,
+    MessageRequestStatus.EXPIRED.value,
+)
 
 
 def _lang(user: User | None, fallback: str = "ru") -> str:
@@ -103,14 +112,7 @@ async def _assert_can_send(
         .where(
             MessageRequest.profile_id == profile.id,
             MessageRequest.sender_user_id == sender.id,
-            MessageRequest.status.in_(
-                [
-                    MessageRequestStatus.PENDING.value,
-                    MessageRequestStatus.REPLIED.value,
-                    MessageRequestStatus.UNLOCKED.value,
-                    MessageRequestStatus.CHATTING.value,
-                ]
-            ),
+            MessageRequest.status.in_(list(ACTIVE_PAIR_STATUSES)),
         )
     )
     if int(pending_pair.scalar_one()) > 0:
@@ -148,6 +150,117 @@ async def _assert_can_send(
         raise MessageServiceError("rate_day", "Daily letter limit")
 
 
+async def _charge_send(
+    session: AsyncSession,
+    *,
+    sender: User,
+    mr: MessageRequest,
+) -> None:
+    """Spend 1 credit (or use unlimited) when sending a letter."""
+    unlimited = await has_unlimited(session, sender.id)
+    if unlimited:
+        mr.paid_at_send = True
+        mr.credit_held = 0
+        return
+    if sender.message_credits < 1:
+        raise MessageServiceError("no_credits", "Not enough message credits")
+    sender.message_credits -= 1
+    mr.paid_at_send = True
+    mr.credit_held = 1
+    session.add(sender)
+    session.add(
+        CreditLedgerEntry(
+            user_id=sender.id,
+            entry_type=LedgerEntryType.SPEND.value,
+            delta=-1,
+            balance_after=sender.message_credits,
+            message_request_id=mr.id,
+            note="send_letter",
+        )
+    )
+
+
+async def refund_held_credit(
+    session: AsyncSession,
+    *,
+    mr: MessageRequest,
+    note: str = "letter_refund",
+) -> bool:
+    """Return held credit to the sender. Returns True if a credit was refunded."""
+    if mr.credit_held < 1:
+        return False
+    sender = mr.sender
+    if sender is None:
+        result = await session.execute(select(User).where(User.id == mr.sender_user_id))
+        sender = result.scalar_one_or_none()
+    if sender is None:
+        return False
+    amount = mr.credit_held
+    sender.message_credits += amount
+    mr.credit_held = 0
+    mr.refunded_at = datetime.now(timezone.utc)
+    session.add(sender)
+    session.add(mr)
+    session.add(
+        CreditLedgerEntry(
+            user_id=sender.id,
+            entry_type=LedgerEntryType.REFUND.value,
+            delta=amount,
+            balance_after=sender.message_credits,
+            message_request_id=mr.id,
+            note=note,
+        )
+    )
+    return True
+
+
+async def _seed_chat_from_letter(session: AsyncSession, mr: MessageRequest) -> None:
+    existing = await session.execute(
+        select(func.count())
+        .select_from(ChatMessage)
+        .where(ChatMessage.message_request_id == mr.id)
+    )
+    if int(existing.scalar_one()) > 0:
+        return
+    session.add(
+        ChatMessage(
+            message_request_id=mr.id,
+            sender_user_id=mr.sender_user_id,
+            text=mr.text,
+            text_translated=mr.text_translated,
+        )
+    )
+    if mr.reply_text and mr.profile is not None:
+        session.add(
+            ChatMessage(
+                message_request_id=mr.id,
+                sender_user_id=mr.profile.user_id,
+                text=mr.reply_text,
+                text_translated=mr.reply_text_translated,
+            )
+        )
+
+
+async def _open_chat_after_timely_reply(
+    session: AsyncSession,
+    settings: Settings,
+    *,
+    mr: MessageRequest,
+) -> MessageRequest:
+    """First reply within the timeout: chat opens forever, credit is consumed (no refund)."""
+    now = datetime.now(timezone.utc)
+    mr.credit_held = 0
+    mr.status = MessageRequestStatus.CHATTING.value
+    mr.unlocked_at = now
+    session.add(mr)
+    await _seed_chat_from_letter(session, mr)
+    await session.commit()
+    mr = await get_message_request(session, mr.id)
+    assert mr is not None
+    await notify_parties_unlocked(settings, request=mr)
+    return mr
+
+
 async def create_message_request(
     session: AsyncSession,
     settings: Settings,
@@ -178,15 +291,13 @@ async def create_message_request(
     source_lang = _lang(sender)
     recipient = profile.user
     target_lang = _lang(recipient, _counterpart_lang(source_lang))
-    translated = await translate_text(
+    translated = await translate_text_safe(
         cleaned,
         target_language=target_lang,
         source_language=source_lang,
-        api_key=settings.translation_api_key,
-        model=settings.openai_translate_model,
+        settings=settings,
     )
 
-    # Persist light identity on sender for future letters
     if remember_identity:
         sender.stated_name = name
         sender.stated_age = sender_age
@@ -203,8 +314,12 @@ async def create_message_request(
         sender_age=sender_age,
         sender_photo_file_id=sender_photo_file_id,
         status=MessageRequestStatus.PENDING.value,
+        paid_at_send=False,
+        credit_held=0,
     )
     session.add(mr)
+    await session.flush()
+    await _charge_send(session, sender=sender, mr=mr)
     await session.commit()
 
     mr = await get_message_request(session, mr.id)
@@ -212,6 +327,24 @@ async def create_message_request(
     if recipient:
         await notify_new_letter(settings, recipient=recipient, request=mr)
     return mr
+
+
+async def translate_text_safe(
+    text: str,
+    *,
+    target_language: str,
+    source_language: str,
+    settings: Settings,
+) -> str | None:
+    from app.services.translate import translate_text
+
+    return await translate_text(
+        text,
+        target_language=target_language,
+        source_language=source_language,
+        api_key=settings.translation_api_key,
+        model=settings.openai_translate_model,
+    )
 
 
 async def list_inbox(session: AsyncSession, user: User) -> list[MessageRequest]:
@@ -247,6 +380,7 @@ async def reject_message_request(
         raise MessageServiceError("forbidden", "Only recipient can reject")
     if mr.status != MessageRequestStatus.PENDING.value:
         raise MessageServiceError("bad_status", "Request is not pending")
+    refunded = await refund_held_credit(session, mr=mr, note="letter_rejected_refund")
     mr.status = MessageRequestStatus.REJECTED.value
     mr.responded_at = datetime.now(timezone.utc)
     session.add(mr)
@@ -254,7 +388,9 @@ async def reject_message_request(
     mr = await get_message_request(session, mr.id)
     assert mr is not None
     if mr.sender:
-        await notify_recipient_rejected(settings, initiator=mr.sender, request=mr)
+        await notify_recipient_rejected(
+            settings, initiator=mr.sender, request=mr, credit_refunded=refunded
+        )
     return mr
 
 
@@ -268,8 +404,11 @@ async def reply_message_request(
 ) -> MessageRequest:
     if mr.profile is None or mr.profile.user_id != actor.id:
         raise MessageServiceError("forbidden", "Only recipient can reply")
-    if mr.status != MessageRequestStatus.PENDING.value:
-        raise MessageServiceError("bad_status", "Request is not pending")
+    if mr.status not in {
+        MessageRequestStatus.PENDING.value,
+        MessageRequestStatus.EXPIRED.value,
+    }:
+        raise MessageServiceError("bad_status", "Request cannot accept a reply")
     cleaned = (reply_text or "").strip()
     if len(cleaned) < 1:
         raise MessageServiceError("text_short", "Reply too short")
@@ -278,20 +417,27 @@ async def reply_message_request(
     if contains_contact_info(cleaned):
         raise MessageServiceError("contact_forbidden", "Contact details are not allowed")
 
+    was_expired = mr.status == MessageRequestStatus.EXPIRED.value
     source_lang = _lang(actor)
     target_lang = _lang(mr.sender, _counterpart_lang(source_lang))
-    translated = await translate_text(
+    translated = await translate_text_safe(
         cleaned,
         target_language=target_lang,
         source_language=source_lang,
-        api_key=settings.translation_api_key,
-        model=settings.openai_translate_model,
+        settings=settings,
     )
     mr.reply_text = cleaned
     mr.reply_text_translated = translated
-    mr.status = MessageRequestStatus.REPLIED.value
     mr.responded_at = datetime.now(timezone.utc)
     session.add(mr)
+
+    # Timely reply after a paid send → chat opens forever, no second payment.
+    if not was_expired and mr.paid_at_send:
+        await session.flush()
+        return await _open_chat_after_timely_reply(session, settings, mr=mr)
+
+    # Late reply after refund, or legacy free letter → initiator must unlock again.
+    mr.status = MessageRequestStatus.REPLIED.value
     await session.commit()
     mr = await get_message_request(session, mr.id)
     assert mr is not None
@@ -338,46 +484,54 @@ async def unlock_with_credit(
                 balance_after=actor.message_credits,
                 payment_id=payment_id,
                 message_request_id=mr.id,
-                note="unlock_message",
+                note="reopen_message",
             )
         )
     now = datetime.now(timezone.utc)
     mr.status = MessageRequestStatus.CHATTING.value
     mr.unlocked_at = now
+    mr.credit_held = 0
     if payment_id:
         mr.charged_payment_id = payment_id
     session.add(mr)
-
-    # Seed chat with the original letter + reply (if not already present)
-    existing = await session.execute(
-        select(func.count())
-        .select_from(ChatMessage)
-        .where(ChatMessage.message_request_id == mr.id)
-    )
-    if int(existing.scalar_one()) == 0:
-        session.add(
-            ChatMessage(
-                message_request_id=mr.id,
-                sender_user_id=mr.sender_user_id,
-                text=mr.text,
-                text_translated=mr.text_translated,
-            )
-        )
-        if mr.reply_text:
-            session.add(
-                ChatMessage(
-                    message_request_id=mr.id,
-                    sender_user_id=mr.profile.user_id,
-                    text=mr.reply_text,
-                    text_translated=mr.reply_text_translated,
-                )
-            )
+    await _seed_chat_from_letter(session, mr)
 
     await session.commit()
     mr = await get_message_request(session, mr.id)
     assert mr is not None
     await notify_parties_unlocked(settings, request=mr)
     return mr
+
+
+async def expire_due_letters(session: AsyncSession, settings: Settings) -> int:
+    """Refund + close pending letters with no reply within the timeout."""
+    days = max(1, settings.message_reply_timeout_days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    result = await session.execute(
+        select(MessageRequest)
+        .where(
+            MessageRequest.status == MessageRequestStatus.PENDING.value,
+            MessageRequest.created_at <= cutoff,
+        )
+        .options(
+            selectinload(MessageRequest.profile).selectinload(Profile.user),
+            selectinload(MessageRequest.sender),
+        )
+        .order_by(MessageRequest.created_at.asc())
+        .limit(50)
+    )
+    rows = list(result.scalars().all())
+    expired = 0
+    for mr in rows:
+        await refund_held_credit(session, mr=mr, note="letter_timeout_refund")
+        mr.status = MessageRequestStatus.EXPIRED.value
+        session.add(mr)
+        await session.commit()
+        refreshed = await get_message_request(session, mr.id)
+        if refreshed is not None:
+            await notify_letter_expired(settings, request=refreshed)
+        expired += 1
+    return expired
 
 
 async def send_chat_message(
@@ -408,12 +562,11 @@ async def send_chat_message(
     source_lang = _lang(actor)
     other = mr.sender if actor.id == owner_id else mr.profile.user
     target_lang = _lang(other, _counterpart_lang(source_lang))
-    translated = await translate_text(
+    translated = await translate_text_safe(
         cleaned,
         target_language=target_lang,
         source_language=source_lang,
-        api_key=settings.translation_api_key,
-        model=settings.openai_translate_model,
+        settings=settings,
     )
     if mr.status == MessageRequestStatus.UNLOCKED.value:
         mr.status = MessageRequestStatus.CHATTING.value
@@ -450,7 +603,12 @@ async def inbox_pending_count(session: AsyncSession, user: User) -> int:
         .select_from(MessageRequest)
         .where(
             MessageRequest.profile_id == profile.id,
-            MessageRequest.status == MessageRequestStatus.PENDING.value,
+            MessageRequest.status.in_(
+                [
+                    MessageRequestStatus.PENDING.value,
+                    MessageRequestStatus.EXPIRED.value,
+                ]
+            ),
         )
     )
     return int(count.scalar_one())

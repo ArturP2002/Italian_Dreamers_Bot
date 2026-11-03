@@ -18,6 +18,8 @@ function statusKey(item: MessageRequestItem): Parameters<typeof t>[1] {
       return "inboxStatusChatting";
     case "rejected":
       return "inboxStatusRejected";
+    case "expired":
+      return "inboxStatusExpired";
     default:
       return "inboxStatusPending";
   }
@@ -40,6 +42,10 @@ function previewText(item: MessageRequestItem, language: Language): string {
   const showTranslated = language === "ru" || language === "it";
   if (item.direction === "incoming") {
     return (showTranslated && item.text_translated) || item.text;
+  }
+  // Late reply before re-open: text stays hidden for the initiator.
+  if (item.status === "replied") {
+    return t(language, "letterReplyHidden");
   }
   if (item.reply_text) {
     return (showTranslated && item.reply_text_translated) || item.reply_text;

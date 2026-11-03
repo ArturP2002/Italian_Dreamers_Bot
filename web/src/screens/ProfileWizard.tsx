@@ -553,6 +553,9 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
       profile?.wants_children === "yes" ? "yes" : profile?.wants_children === "no" ? "no" : "unsure";
     return (
       <section className="screen screen--milky">
+        <Link to="/" className="work-back">
+          ← {t(language, "backHome")}
+        </Link>
         <h1 className="wizard-title">{t(language, "myProfileTitle")}</h1>
 
         <div className="my-profile-status">

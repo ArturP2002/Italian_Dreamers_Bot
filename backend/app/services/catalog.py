@@ -25,6 +25,7 @@ ACTIVE_LETTER_STATUSES = (
     MessageRequestStatus.REPLIED.value,
     MessageRequestStatus.UNLOCKED.value,
     MessageRequestStatus.CHATTING.value,
+    MessageRequestStatus.EXPIRED.value,
 )
 PAGE_SIZE = 20
 

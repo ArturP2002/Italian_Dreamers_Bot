@@ -68,6 +68,8 @@ class MessageRequestStatus(StrEnum):
     REJECTED = "rejected"
     # Recipient profile was taken down and deleted before the chat was opened.
     CLOSED = "closed"
+    # No reply within the timeout: credit refunded, conversation closed until a late reply.
+    EXPIRED = "expired"
     # legacy alias kept for compatibility
     ACCEPTED = "accepted"
 
@@ -370,6 +372,11 @@ class MessageRequest(Base):
     unlocked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Plain int to avoid circular FK with payments.related_message_request_id
     charged_payment_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # True when send spent a credit or used Dreamers Plus (new pay-at-send model).
+    paid_at_send: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    # Refundable credits held while waiting for a first reply (1 after paid send, 0 after refund/consume).
+    credit_held: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    refunded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

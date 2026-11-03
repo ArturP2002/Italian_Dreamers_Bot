@@ -248,14 +248,30 @@ def _serialize_request(mr: MessageRequest, viewer: User, *, has_unlimited: bool 
     }
     if not can_chat:
         counterpart_username = None
+
+    # After a late reply the initiator must re-open: hide reply text until unlock.
+    reply_text = mr.reply_text
+    reply_text_translated = mr.reply_text_translated
+    if (
+        not is_incoming
+        and status_val == MessageRequestStatus.REPLIED.value
+        and not can_chat
+    ):
+        reply_text = None
+        reply_text_translated = None
+
+    can_reply = is_incoming and status_val in {
+        MessageRequestStatus.PENDING.value,
+        MessageRequestStatus.EXPIRED.value,
+    }
     return MessageRequestOut(
         id=mr.id,
         status=status_val,
         direction=direction,
         text=mr.text,
         text_translated=mr.text_translated,
-        reply_text=mr.reply_text,
-        reply_text_translated=mr.reply_text_translated,
+        reply_text=reply_text,
+        reply_text_translated=reply_text_translated,
         sender_name=mr.sender_name,
         sender_age=mr.sender_age,
         sender_photo_url=_photo_url(mr.sender_photo_file_id),
@@ -271,7 +287,7 @@ def _serialize_request(mr: MessageRequest, viewer: User, *, has_unlimited: bool 
         unlocked_at=mr.unlocked_at,
         created_at=mr.created_at,
         responded_at=mr.responded_at,
-        can_reply=is_incoming and status_val == MessageRequestStatus.PENDING.value,
+        can_reply=can_reply,
         can_reject=is_incoming and status_val == MessageRequestStatus.PENDING.value,
         can_unlock=(
             not is_incoming

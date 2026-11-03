@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { LikeHeart, MatchBanner } from "../components/LikeHeart";
+import { LikeHeart } from "../components/LikeHeart";
 import { type Language, t } from "../i18n/messages";
 import { fetchCatalog, mediaUrl, toggleCatalogLike, type CatalogCard } from "../lib/api";
 

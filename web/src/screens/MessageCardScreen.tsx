@@ -192,6 +192,15 @@ export function MessageCardScreen({ language, onCreditsChange }: Props) {
           <p className="letter-card__notice">{t(language, "profileDeletedNote")}</p>
         ) : null}
 
+        {item.status === "expired" ? (
+          <p className="letter-card__notice">
+            {t(
+              language,
+              isIncoming ? "letterExpiredIncoming" : "letterExpiredOutgoing",
+            )}
+          </p>
+        ) : null}
+
         <h2 className="letter-card__label">{t(language, "cardLetter")}</h2>
         <p className="letter-card__text">{letterText}</p>
 
@@ -199,6 +208,10 @@ export function MessageCardScreen({ language, onCreditsChange }: Props) {
           <p className="home-meta" style={{ padding: "0 16px 12px" }}>
             {t(language, "writePushHint")}
           </p>
+        ) : null}
+
+        {!isIncoming && item.can_unlock ? (
+          <p className="letter-card__notice">{t(language, "letterReplyHidden")}</p>
         ) : null}
 
         {replyShown ? (
@@ -210,7 +223,9 @@ export function MessageCardScreen({ language, onCreditsChange }: Props) {
 
         {item.can_reply ? (
           <div className="letter-card__actions">
-            <p className="home-meta">{t(language, "replyFreeHint")}</p>
+            <p className="home-meta">
+              {t(language, item.status === "expired" ? "replyExpiredHint" : "replyFreeHint")}
+            </p>
             <div className="field">
               <textarea
                 rows={4}

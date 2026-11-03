@@ -33,7 +33,11 @@ from app.services.splash import SPLASH_DIR
 logger = logging.getLogger(__name__)
 
 OPEN_CHAT_STATUSES = (MessageRequestStatus.UNLOCKED.value, MessageRequestStatus.CHATTING.value)
-UNANSWERED_STATUSES = (MessageRequestStatus.PENDING.value, MessageRequestStatus.REPLIED.value)
+UNANSWERED_STATUSES = (
+    MessageRequestStatus.PENDING.value,
+    MessageRequestStatus.REPLIED.value,
+    MessageRequestStatus.EXPIRED.value,
+)
 
 
 @dataclass
@@ -86,6 +90,21 @@ async def take_down_and_delete_profile(
     now = datetime.now(timezone.utc)
     owner = profile.user
     profile_name = profile.name
+
+    # Refund held credits on unanswered paid letters before closing them.
+    from app.services.messages import refund_held_credit
+
+    held_rows = await session.execute(
+        select(MessageRequest)
+        .where(
+            MessageRequest.profile_id == profile.id,
+            MessageRequest.status.in_(UNANSWERED_STATUSES),
+            MessageRequest.credit_held > 0,
+        )
+        .options(selectinload(MessageRequest.sender))
+    )
+    for letter in held_rows.scalars().all():
+        await refund_held_credit(session, mr=letter, note="profile_takedown_refund")
 
     closed = await session.execute(
         update(MessageRequest)

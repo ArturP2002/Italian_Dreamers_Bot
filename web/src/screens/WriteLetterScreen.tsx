@@ -147,6 +147,7 @@ export function WriteLetterScreen({ language }: Props) {
         else if (raw.includes("photo_required")) code = "photo_required";
         else if (raw.includes("photo_not_confirmed")) code = "photo_not_confirmed";
         else if (raw.includes("no_person")) code = "no_person";
+        else if (raw.includes("no_credits") || raw.includes("402")) code = "no_credits";
       }
 
       const textByCode: Record<string, string> = {
@@ -159,6 +160,7 @@ export function WriteLetterScreen({ language }: Props) {
         photo_required: t(language, "writePhotoRequired"),
         photo_not_confirmed: t(language, "writePhotoMine"),
         no_person: t(language, "writeNoPerson"),
+        no_credits: t(language, "writeNeedCredit"),
       };
       const message = textByCode[code] ?? t(language, "errorGeneric");
       setError(message);

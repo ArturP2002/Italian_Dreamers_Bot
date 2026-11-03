@@ -71,6 +71,8 @@ class Settings(BaseSettings):
     rate_contact_per_day: int = Field(alias="RATE_CONTACT_PER_DAY", default=100)
     rate_max_pending_outgoing: int = Field(alias="RATE_MAX_PENDING_OUTGOING", default=0)
     rate_soft_ban_hours: int = Field(alias="RATE_SOFT_BAN_HOURS", default=0)
+    # Days the recipient has to reply before the sender's acquaintance credit is refunded.
+    message_reply_timeout_days: int = Field(alias="MESSAGE_REPLY_TIMEOUT_DAYS", default=3)
 
     # Dev: skip Telegram HMAC when initData absent (local browser only)
     allow_dev_auth: bool = Field(alias="ALLOW_DEV_AUTH", default=False)

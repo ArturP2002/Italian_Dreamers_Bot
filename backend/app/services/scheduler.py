@@ -102,6 +102,15 @@ async def scheduler_loop(stop_event: asyncio.Event, interval_seconds: float = 60
         except Exception:
             logger.exception("Scheduler tick failed (weekly report)")
         try:
+            from app.services.messages import expire_due_letters
+
+            async with async_session_factory() as session:
+                expired = await expire_due_letters(session, settings)
+            if expired:
+                logger.info("Expired unanswered letters: %s", expired)
+        except Exception:
+            logger.exception("Scheduler tick failed (letter timeout)")
+        try:
             await asyncio.wait_for(stop_event.wait(), timeout=interval_seconds)
         except asyncio.TimeoutError:
             continue
