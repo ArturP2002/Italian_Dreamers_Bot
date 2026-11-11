@@ -34,6 +34,8 @@ export function ReferralScreen({ language }: Props) {
     else window.open(url, "_blank", "noopener");
   };
 
+  const invited = info?.invited_count ?? 0;
+
   return (
     <section className="screen screen--milky">
       <Link to="/" className="work-back">
@@ -44,12 +46,26 @@ export function ReferralScreen({ language }: Props) {
 
       {info ? (
         <div className="referral-box">
+          <div className="referral-reward">
+            <strong>{t(language, "referralRewardTitle")}</strong>
+            <span>{t(language, "referralRewardHint")}</span>
+          </div>
+
+          <div className="referral-stats">
+            <div className="referral-stat">
+              <span>{t(language, "referralInvited")}</span>
+              <strong>{invited}</strong>
+            </div>
+            <div className="referral-stat">
+              <span>{t(language, "referralTopDays")}</span>
+              <strong>{invited}</strong>
+            </div>
+          </div>
+
           {info.bonus_credits > 0 ? (
             <p className="referral-box__bonus">{tf(language, "referralBonus", { n: info.bonus_credits })}</p>
           ) : null}
-          <p className="referral-box__count">
-            {t(language, "referralInvited")} <strong>{info.invited_count}</strong>
-          </p>
+
           <code className="referral-box__link">{info.link}</code>
           <button type="button" className="btn btn--block btn--dark" onClick={onShare}>
             {t(language, "referralShare")}

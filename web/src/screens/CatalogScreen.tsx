@@ -124,7 +124,7 @@ export function CatalogScreen({ language }: Props) {
             void load(true, null, gender, next);
           }}
         >
-          <span className="catalog-card__badge catalog-card__badge--verified catalog-verified-filter__icon" aria-hidden>
+          <span className="catalog-verified-filter__icon" aria-hidden>
             ✓
           </span>
           {t(language, "catalogVerifiedOnly")}
@@ -155,8 +155,15 @@ export function CatalogScreen({ language }: Props) {
                     NEW
                   </span>
                 ) : null}
-                {item.verified ? (
+                {item.verified && !item.is_top && !item.is_new ? (
                   <span className="catalog-card__badge catalog-card__badge--verified" aria-hidden>
+                    ✓
+                  </span>
+                ) : item.verified ? (
+                  <span
+                    className="catalog-card__badge catalog-card__badge--verified catalog-card__badge--offset"
+                    aria-hidden
+                  >
                     ✓
                   </span>
                 ) : null}

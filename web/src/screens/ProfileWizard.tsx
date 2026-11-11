@@ -570,29 +570,31 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
         <h1 className="wizard-title">{t(language, "myProfileTitle")}</h1>
 
         <div className="my-profile-status">
+          <p className="my-profile-status__eyebrow">{t(language, "myProfileStatusLabel")}</p>
           <strong>{t(language, titleKey)}</strong>
           <p>{t(language, bodyKey)}</p>
-          <p>
-            <a className="home-link" href={channelUrl} target="_blank" rel="noreferrer">
-              {t(language, "homeOpenChannel")}
-            </a>
-          </p>
           {postUrl ? (
             <button type="button" className="btn btn--dark btn--block" onClick={openPost}>
               {t(language, "myProfileOpenPost")}
             </button>
-          ) : null}
-          {status === "queued" || status === "published" ? (
-            <BoostTopCta
-              language={language}
-              verified={me?.verification_status === "verified"}
-              isTop={Boolean(me?.is_top)}
-              topUntil={me?.top_until}
-              starsOnly={language === "it"}
-              className="my-profile-boost"
-            />
-          ) : null}
+          ) : (
+            <p>
+              <a className="home-link" href={channelUrl} target="_blank" rel="noreferrer">
+                {t(language, "homeOpenChannel")}
+              </a>
+            </p>
+          )}
         </div>
+        {status === "queued" || status === "published" ? (
+          <BoostTopCta
+            language={language}
+            verified={me?.verification_status === "verified"}
+            isTop={Boolean(me?.is_top)}
+            topUntil={me?.top_until}
+            starsOnly={language === "it"}
+            className="my-profile-boost"
+          />
+        ) : null}
 
         {profile ? (
           <article className="my-profile-card">
