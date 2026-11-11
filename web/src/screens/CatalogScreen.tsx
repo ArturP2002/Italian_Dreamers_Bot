@@ -131,49 +131,60 @@ export function CatalogScreen({ language }: Props) {
       {error ? <p className="home-meta">{error}</p> : null}
 
       <div className="catalog-grid">
-        {items.map((item) => (
-          <div key={item.id} className="catalog-card">
-            <Link to={`/catalog/${item.id}`} className="catalog-card__link">
-              <div className="catalog-card__photos">
-                {(item.photo_urls.length ? item.photo_urls : [""]).slice(0, 3).map((url, i) =>
-                  url ? (
-                    <img key={url} src={mediaUrl(url)} alt="" />
+        {items.map((item) => {
+          const cover = item.photo_urls[0];
+          return (
+            <div key={item.id} className="catalog-card">
+              <div className="catalog-card__media">
+                <Link to={`/catalog/${item.id}`} className="catalog-card__photo-link" tabIndex={-1}>
+                  {cover ? (
+                    <img src={mediaUrl(cover)} alt="" />
                   ) : (
-                    <div key={i} className="catalog-card__ph" />
-                  ),
-                )}
+                    <div className="catalog-card__ph" />
+                  )}
+                </Link>
+                {item.is_top ? (
+                  <span className="catalog-card__badge catalog-card__badge--top" aria-hidden>
+                    ↑
+                  </span>
+                ) : null}
+                {item.verified ? (
+                  <span className="catalog-card__badge catalog-card__badge--verified" aria-hidden>
+                    ✓
+                  </span>
+                ) : null}
+                <LikeHeart
+                  liked={item.liked}
+                  matched={item.matched}
+                  className="like-heart--card-br"
+                  aria-label={t(language, "catalogLike")}
+                  onClick={() => {
+                    void toggleCatalogLike(item.id).then((res) => {
+                      setItems((prev) =>
+                        prev.map((p) =>
+                          p.id === item.id ? { ...p, liked: res.liked, matched: res.matched } : p,
+                        ),
+                      );
+                    });
+                  }}
+                />
               </div>
-              <strong>
-                {item.is_top ? "↑ " : ""}
-                {item.verified ? "✓ " : ""}
-                {item.name}, {item.age}
-              </strong>
-              <span>{item.city}</span>
-              {item.matched ? (
-                <em className="catalog-card__match">{t(language, "catalogMatchTitle")}</em>
-              ) : item.already_written ? (
-                <em>{t(language, "catalogAlreadyWritten")}</em>
-              ) : item.status === "queued" ? (
-                <em>{t(language, "catalogQueued")}</em>
-              ) : null}
-            </Link>
-            <LikeHeart
-              liked={item.liked}
-              matched={item.matched}
-              className="like-heart--on-photo"
-              aria-label={t(language, "catalogLike")}
-              onClick={() => {
-                void toggleCatalogLike(item.id).then((res) => {
-                  setItems((prev) =>
-                    prev.map((p) =>
-                      p.id === item.id ? { ...p, liked: res.liked, matched: res.matched } : p,
-                    ),
-                  );
-                });
-              }}
-            />
-          </div>
-        ))}
+              <Link to={`/catalog/${item.id}`} className="catalog-card__link">
+                <strong>
+                  {item.name}, {item.age}
+                </strong>
+                <span>{item.city}</span>
+                {item.matched ? (
+                  <em className="catalog-card__match">{t(language, "catalogMatchTitle")}</em>
+                ) : item.already_written ? (
+                  <em>{t(language, "catalogAlreadyWritten")}</em>
+                ) : item.status === "queued" ? (
+                  <em>{t(language, "catalogQueued")}</em>
+                ) : null}
+              </Link>
+            </div>
+          );
+        })}
       </div>
 
       {items.length === 0 && !busy ? <p className="home-meta">{t(language, "catalogEmpty")}</p> : null}
