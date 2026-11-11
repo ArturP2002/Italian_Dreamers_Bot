@@ -137,15 +137,17 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
   min-height: 210px;
-  padding: 14px;
+  padding: 44px 12px 16px;
   border-radius: var(--radius-lg);
-  background: #14110e;
+  background: var(--color-card);
   color: #fff;
   text-decoration: none;
   overflow: hidden;
+  text-align: center;
 }
 
 .home-channel-card__tg {
@@ -174,23 +176,26 @@
 }
 
 .home-channel-card__heart {
-  position: absolute;
-  top: 46%;
-  left: 50%;
-  transform: translate(-50%, -58%);
-  width: 72px;
-  height: 72px;
+  flex-shrink: 0;
+  width: 84px;
+  height: 84px;
   border-radius: 50%;
   background: #fff;
   display: grid;
   place-items: center;
+  overflow: hidden;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
 }
 
-.home-channel-card__heart-icon {
-  width: 42px;
-  height: 42px;
+.home-channel-card__heart img {
+  width: 70%;
+  height: 70%;
+  object-fit: contain;
   display: block;
+}
+
+.home-channel-card__copy {
+  width: 100%;
 }
 
 .home-channel-card__title {
@@ -588,10 +593,10 @@
   inset: 0;
   background: linear-gradient(
     180deg,
-    rgba(26, 21, 17, 0.55) 0%,
-    rgba(26, 21, 17, 0.18) 38%,
-    rgba(26, 21, 17, 0.22) 58%,
-    rgba(26, 21, 17, 0.78) 100%
+    rgba(26, 21, 17, 0.12) 0%,
+    rgba(26, 21, 17, 0.08) 40%,
+    rgba(26, 21, 17, 0.45) 70%,
+    rgba(26, 21, 17, 0.82) 100%
   );
 }
 
@@ -600,37 +605,44 @@
   z-index: 1;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: flex-end;
   min-height: 240px;
   padding: 16px;
 }
 
+.home-referral__footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .home-referral__copy {
-  max-width: 78%;
+  flex: 1;
+  min-width: 0;
+  max-width: 70%;
 }
 
 .home-referral__title {
   margin: 0 0 6px;
   font-family: var(--font-accent);
   font-style: italic;
-  font-weight: 400;
+  font-weight: 700;
   font-size: 20px;
   line-height: 1.2;
+  color: #e8d4a8;
 }
 
 .home-referral__hint {
   margin: 0;
   font-size: 12px;
   line-height: 1.35;
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(255, 255, 255, 0.9);
   max-width: 240px;
 }
 
 .home-referral__cta {
   flex-shrink: 0;
-  align-self: flex-end;
   background: var(--color-graphite);
   color: var(--color-cream);
   border-radius: 999px;

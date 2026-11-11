@@ -318,10 +318,12 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
           </span>
           <span className="home-channel-card__count">{formatMembers(channelMembers, language)}</span>
           <span className="home-channel-card__heart" aria-hidden>
-            <TricolorHeart className="home-channel-card__heart-icon" />
+            <img src={homeAssets.channelHeart} alt="" />
           </span>
-          <h3 className="home-channel-card__title">{t(language, "homeChannelTitle")}</h3>
-          <p className="home-channel-card__hint">{t(language, "homeChannelHint")}</p>
+          <div className="home-channel-card__copy">
+            <h3 className="home-channel-card__title">{t(language, "homeChannelTitle")}</h3>
+            <p className="home-channel-card__hint">{t(language, "homeChannelHint")}</p>
+          </div>
         </a>
 
         <button type="button" className="home-travel-card" onClick={() => setTravelOpen(true)}>
@@ -339,11 +341,13 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
         <img className="home-referral__bg" src={homeAssets.referral} alt="" />
         <div className="home-referral__veil" />
         <div className="home-referral__body">
-          <div className="home-referral__copy">
-            <h3 className="home-referral__title">{t(language, "homeReferral")}</h3>
-            <p className="home-referral__hint">{t(language, "homeReferralHint")}</p>
+          <div className="home-referral__footer">
+            <div className="home-referral__copy">
+              <h3 className="home-referral__title">{t(language, "homeReferral")}</h3>
+              <p className="home-referral__hint">{t(language, "homeReferralHint")}</p>
+            </div>
+            <span className="home-referral__cta">{t(language, "homeReferralCta")}</span>
           </div>
-          <span className="home-referral__cta">{t(language, "homeReferralCta")}</span>
         </div>
       </Link>
 
