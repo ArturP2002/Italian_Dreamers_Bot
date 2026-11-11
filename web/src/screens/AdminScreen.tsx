@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { PhotoLightbox } from "../components/PhotoLightbox";
 import { type Language, t } from "../i18n/messages";
 import {
   adminActivateAdNow,
@@ -323,6 +324,7 @@ export function AdminScreen({ language }: Props) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selectedAdId, setSelectedAdId] = useState<number | null>(null);
   const [detail, setDetail] = useState<AdminProfileDetail | null>(null);
+  const [photoLightboxIndex, setPhotoLightboxIndex] = useState<number | null>(null);
   const [adDetail, setAdDetail] = useState<AdminAd | null>(null);
   const [query, setQuery] = useState("");
   const [adFilter, setAdFilter] = useState<AdFilter>("pending");
@@ -718,11 +720,28 @@ export function AdminScreen({ language }: Props) {
 
       {selectedId != null && detail ? (
         <article className="admin-card admin-detail">
-          <button type="button" className="admin-linkish" onClick={() => setSelectedId(null)}>
+          <button
+            type="button"
+            className="admin-linkish"
+            onClick={() => {
+              setPhotoLightboxIndex(null);
+              setSelectedId(null);
+            }}
+          >
             ← К списку
           </button>
           {detail.photo_url ? (
-            <img className="admin-hero-photo" src={mediaUrl(detail.photo_url)} alt="" />
+            <button
+              type="button"
+              className="admin-hero-photo-btn"
+              onClick={() => {
+                const hero = detail.photo_url ?? "";
+                const idx = detail.photos.findIndex((p) => mediaUrl(p.url) === mediaUrl(hero));
+                setPhotoLightboxIndex(idx >= 0 ? idx : 0);
+              }}
+            >
+              <img className="admin-hero-photo" src={mediaUrl(detail.photo_url)} alt="" />
+            </button>
           ) : null}
           <h2 className="admin-name">
             {detail.name}, {detail.age}
@@ -770,8 +789,16 @@ export function AdminScreen({ language }: Props) {
           ) : null}
           <h3 className="admin-section-label">Все фото · {detail.photos.length}</h3>
           <div className="admin-photo-row">
-            {detail.photos.map((p) => (
-              <img key={p.id} src={mediaUrl(p.url)} alt="" />
+            {detail.photos.map((p, index) => (
+              <button
+                key={p.id}
+                type="button"
+                className="admin-photo-row__open"
+                onClick={() => setPhotoLightboxIndex(index)}
+                aria-label={`Фото ${index + 1}`}
+              >
+                <img src={mediaUrl(p.url)} alt="" />
+              </button>
             ))}
           </div>
 
@@ -1051,6 +1078,16 @@ export function AdminScreen({ language }: Props) {
               </button>
             )}
           </div>
+
+          {photoLightboxIndex != null && detail.photos.length > 0 ? (
+            <PhotoLightbox
+              urls={detail.photos.map((p) => mediaUrl(p.url)).filter(Boolean) as string[]}
+              index={photoLightboxIndex}
+              onClose={() => setPhotoLightboxIndex(null)}
+              onIndexChange={setPhotoLightboxIndex}
+              closeLabel="×"
+            />
+          ) : null}
         </article>
       ) : null}
 

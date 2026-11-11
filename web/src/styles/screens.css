@@ -1715,13 +1715,23 @@
   font: inherit;
 }
 
+.admin-hero-photo-btn {
+  display: block;
+  width: 100%;
+  padding: 0;
+  margin: 0 0 14px;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+
 .admin-hero-photo {
   width: 100%;
   aspect-ratio: 4 / 5;
   max-height: 360px;
   object-fit: cover;
   border-radius: var(--radius-md);
-  margin-bottom: 14px;
+  display: block;
 }
 
 .admin-name {
@@ -1770,12 +1780,22 @@
   margin: 14px 0 4px;
 }
 
-.admin-photo-row img {
+.admin-photo-row__open {
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  border-radius: 10px;
+  cursor: zoom-in;
+}
+
+.admin-photo-row img,
+.admin-photo-row__open img {
   width: 84px;
   height: 104px;
-  flex-shrink: 0;
   object-fit: cover;
   border-radius: 10px;
+  display: block;
 }
 
 .admin-actions {
@@ -3089,28 +3109,37 @@
 .like-heart {
   appearance: none;
   border: 0;
-  background: transparent;
+  background: rgba(26, 21, 17, 0.28);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   padding: 0;
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
   display: grid;
   place-items: center;
   cursor: pointer;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
+  transition: transform 160ms ease, background 160ms ease;
 }
 
-.like-heart svg {
-  width: 26px;
-  height: 26px;
-  fill: transparent;
-  stroke: #fff;
-  stroke-width: 1.8;
+.like-heart:active {
+  transform: scale(0.92);
 }
 
-.like-heart.is-on svg {
-  fill: #e11d48;
-  stroke: #fff;
-  stroke-width: 1.4;
+.like-heart__glyph {
+  font-size: 22px;
+  line-height: 1;
+  display: block;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.18));
+}
+
+.like-heart.is-on {
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.like-heart.is-on .like-heart__glyph {
+  transform: scale(1.05);
 }
 
 .like-heart--on-photo {
