@@ -21,7 +21,7 @@ from app.services.catalog import (
     written_profile_ids,
 )
 from app.services.channel import ensure_profile_translated
-from app.services.entitlements import is_top_now
+from app.services.entitlements import is_new_in_catalog, is_top_now
 from app.services.likes import LikeServiceError, liked_profile_ids, matched_profile_ids, toggle_like
 from app.services.profiles import get_user_profile
 
@@ -42,6 +42,7 @@ class CatalogCard(BaseModel):
     liked: bool = False
     matched: bool = False
     is_top: bool = False
+    is_new: bool = False
     status: str
 
 
@@ -95,6 +96,7 @@ def _card(
         liked=liked,
         matched=matched,
         is_top=is_top_now(profile),
+        is_new=is_new_in_catalog(profile),
         status=profile.status,
     )
 

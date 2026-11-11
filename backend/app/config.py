@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     price_profile_publish_stars: int = Field(alias="PRICE_PROFILE_PUBLISH_STARS", default=1000)
     price_ad_slot_stars: int = Field(alias="PRICE_AD_SLOT_STARS", default=1000)
     price_unlimited_sub_stars: int = Field(alias="PRICE_UNLIMITED_SUB_STARS", default=1000)
-    price_catalog_top_stars: int = Field(alias="PRICE_CATALOG_TOP_STARS", default=1000)
+    price_catalog_top_stars: int = Field(alias="PRICE_CATALOG_TOP_STARS", default=500)
     # Telegram Stars recurring period (seconds). Bot API currently allows 2592000 = 30 days.
     subscription_period_seconds: int = Field(alias="SUBSCRIPTION_PERIOD_SECONDS", default=2592000)
     # Reserved for YooKassa later — unused in this wave.
@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     price_profile_publish_rub: int = Field(alias="PRICE_PROFILE_PUBLISH_RUB", default=0)
     price_ad_slot_rub: int = Field(alias="PRICE_AD_SLOT_RUB", default=0)
     price_unlimited_sub_rub: int = Field(alias="PRICE_UNLIMITED_SUB_RUB", default=2000)
-    price_catalog_top_rub: int = Field(alias="PRICE_CATALOG_TOP_RUB", default=0)
+    price_catalog_top_rub: int = Field(alias="PRICE_CATALOG_TOP_RUB", default=1000)
 
     # Telegram username (without @) shown by /support and /paysupport.
     support_username: str = Field(alias="SUPPORT_USERNAME", default="")

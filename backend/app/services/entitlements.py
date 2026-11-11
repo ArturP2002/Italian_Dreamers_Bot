@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Profile, Subscription, SubscriptionStatus
 
 SUBSCRIPTION_PERIOD = timedelta(days=30)
+CATALOG_TOP_PERIOD = timedelta(days=7)
+CATALOG_NEW_TTL = timedelta(hours=48)
 
 
 def utcnow() -> datetime:
@@ -37,6 +39,19 @@ async def has_unlimited(session: AsyncSession, user_id: int) -> bool:
 def is_top_now(profile: Profile, now: datetime | None = None) -> bool:
     now = now or utcnow()
     return bool(profile.top_until and profile.top_until > now)
+
+
+def is_new_in_catalog(profile: Profile, now: datetime | None = None) -> bool:
+    """NEW badge: from paid/queued into app catalog, 48h, not while boosted."""
+    now = now or utcnow()
+    if is_top_now(profile, now):
+        return False
+    stamp = profile.paid_at or profile.approved_at
+    if stamp is None:
+        return False
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    return (now - stamp) <= CATALOG_NEW_TTL
 
 
 def extend_datetime(current: datetime | None, until: datetime) -> datetime:

@@ -39,7 +39,7 @@ function AdminGate({ language, me }: { language: Language; me: MeUser | null }) 
   if (me === null) {
     return (
       <section className="screen screen--work">
-        <p className="heading-accent" style={{ color: "var(--color-champagne)" }}>
+        <p className="heading-display" style={{ color: "var(--color-champagne)", fontSize: 22 }}>
           Italian Dreamers
         </p>
       </section>

@@ -182,6 +182,7 @@ export type CatalogCard = {
   liked?: boolean;
   matched?: boolean;
   is_top?: boolean;
+  is_new?: boolean;
   status: string;
 };
 

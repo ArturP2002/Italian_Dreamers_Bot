@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import uuid
 
@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import AuthContext, get_auth_context
 from app.config import Settings, get_settings
 from app.database import get_session
-from app.models import LanguageCode, Profile, ProfileStatus, TravelInterest
+from app.models import LanguageCode, Profile, ProfileStatus, TravelInterest, VerificationStatus
 from app.services.entitlements import active_subscription, has_unlimited, is_top_now
 from app.services.legacy import LegacyServiceError, claim_legacy
 from app.services.payments import (
@@ -73,6 +73,18 @@ class WriteAccessUpdate(BaseModel):
     granted: bool
 
 
+async def _touch_last_seen(session: AsyncSession, auth: AuthContext) -> None:
+    now = datetime.now(timezone.utc)
+    prev = auth.user.last_seen_at
+    if prev is not None and prev.tzinfo is None:
+        prev = prev.replace(tzinfo=timezone.utc)
+    if prev is None or (now - prev) >= timedelta(minutes=5):
+        auth.user.last_seen_at = now
+        session.add(auth.user)
+        await session.commit()
+        await session.refresh(auth.user)
+
+
 async def _build_me(auth: AuthContext, session: AsyncSession) -> MeResponse:
     now = datetime.now(timezone.utc)
     soft_ban = auth.user.soft_ban_until
@@ -114,6 +126,7 @@ async def get_me(
     auth: AuthContext = Depends(get_auth_context),
     session: AsyncSession = Depends(get_session),
 ) -> MeResponse:
+    await _touch_last_seen(session, auth)
     return await _build_me(auth, session)
 
 
@@ -227,6 +240,8 @@ async def buy_catalog_top(
         raise HTTPException(status_code=404, detail="Profile not found")
     if profile.status not in {ProfileStatus.QUEUED.value, ProfileStatus.PUBLISHED.value}:
         raise HTTPException(status_code=409, detail="Profile is not in catalog")
+    if profile.verification_status != VerificationStatus.VERIFIED.value:
+        raise HTTPException(status_code=409, detail="verification_required")
     if await has_unlimited(session, auth.user.id):
         return {"ok": True, "already": True, "included": True}
     payment = await create_catalog_top_payment(session, settings, user=auth.user, profile=profile)

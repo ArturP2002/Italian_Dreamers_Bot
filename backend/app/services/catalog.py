@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import base64
+import random
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -17,7 +19,7 @@ from app.models import (
     User,
     VerificationStatus,
 )
-from app.services.entitlements import is_top_now
+from app.services.entitlements import CATALOG_NEW_TTL, is_new_in_catalog, is_top_now
 
 CATALOG_STATUSES = (ProfileStatus.QUEUED.value, ProfileStatus.PUBLISHED.value)
 ACTIVE_LETTER_STATUSES = (
@@ -28,10 +30,25 @@ ACTIVE_LETTER_STATUSES = (
     MessageRequestStatus.EXPIRED.value,
 )
 PAGE_SIZE = 20
+ROME = ZoneInfo("Europe/Rome")
 
 
-def _sort_ts():
-    return func.coalesce(Profile.published_at, Profile.paid_at, Profile.created_at)
+def _activity_ts(profile: Profile) -> datetime:
+    user = getattr(profile, "user", None)
+    candidates = [
+        getattr(user, "last_seen_at", None) if user else None,
+        profile.published_at,
+        profile.paid_at,
+        profile.created_at,
+    ]
+    stamps = []
+    for stamp in candidates:
+        if stamp is None:
+            continue
+        if stamp.tzinfo is None:
+            stamp = stamp.replace(tzinfo=timezone.utc)
+        stamps.append(stamp)
+    return max(stamps) if stamps else datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 
 def encode_cursor(ts: datetime, profile_id: int) -> str:
@@ -45,25 +62,38 @@ def decode_cursor(cursor: str) -> tuple[datetime, int] | None:
     decoded = decode_catalog_cursor(cursor)
     if decoded is None:
         return None
-    _is_top, ts, profile_id = decoded
+    _bucket, ts, profile_id = decoded
     return ts, profile_id
 
 
 def encode_catalog_cursor(*, is_top: bool, ts: datetime, profile_id: int) -> str:
+    """Legacy helper kept for tests; prefer encode_feed_cursor."""
     if ts.tzinfo is None:
         ts = ts.replace(tzinfo=timezone.utc)
     raw = f"{1 if is_top else 0}:{ts.timestamp()}:{profile_id}"
     return base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
 
 
+def encode_feed_cursor(*, phase: str, featured_offset: int = 0, ts: datetime | None = None, profile_id: int = 0) -> str:
+    if phase == "f":
+        raw = f"f:{featured_offset}"
+    else:
+        assert ts is not None
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        raw = f"r:{ts.timestamp()}:{profile_id}"
+    return base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
+
+
 def decode_catalog_cursor(cursor: str) -> tuple[int, datetime, int] | None:
+    """Legacy tuple (is_top_flag, ts, id) for older callers/tests."""
     if not cursor:
         return None
     padded = cursor + "=" * (-len(cursor) % 4)
     try:
         raw = base64.urlsafe_b64decode(padded.encode()).decode()
         parts = raw.split(":")
-        if len(parts) == 3:
+        if len(parts) == 3 and parts[0] in {"0", "1"}:
             return int(parts[0]), datetime.fromtimestamp(float(parts[1]), tz=timezone.utc), int(parts[2])
         if len(parts) == 2:
             return 0, datetime.fromtimestamp(float(parts[0]), tz=timezone.utc), int(parts[1])
@@ -72,11 +102,29 @@ def decode_catalog_cursor(cursor: str) -> tuple[int, datetime, int] | None:
         return None
 
 
-def _is_top_expr(now: datetime):
-    return case(
-        (and_(Profile.top_until.is_not(None), Profile.top_until > now), 1),
-        else_=0,
-    )
+def decode_feed_cursor(
+    cursor: str,
+) -> tuple[str, int, datetime | None, int] | None:
+    """phase 'f'|'r', featured_offset, rest_ts, rest_id."""
+    if not cursor:
+        return None
+    padded = cursor + "=" * (-len(cursor) % 4)
+    try:
+        raw = base64.urlsafe_b64decode(padded.encode()).decode()
+        if raw.startswith("f:"):
+            return "f", int(raw.split(":", 1)[1]), None, 0
+        if raw.startswith("r:"):
+            _, ts_s, pid_s = raw.split(":", 2)
+            return "r", 0, datetime.fromtimestamp(float(ts_s), tz=timezone.utc), int(pid_s)
+        # Legacy cursors: treat as start of rest after that point
+        parts = raw.split(":")
+        if len(parts) == 3:
+            return "r", 0, datetime.fromtimestamp(float(parts[1]), tz=timezone.utc), int(parts[2])
+        if len(parts) == 2:
+            return "r", 0, datetime.fromtimestamp(float(parts[0]), tz=timezone.utc), int(parts[1])
+        return None
+    except (ValueError, TypeError, OSError):
+        return None
 
 
 def photo_url(file_id: str | None) -> str | None:
@@ -120,6 +168,49 @@ async def written_profile_ids(
     return out
 
 
+def _daily_shuffle(items: list[Profile], *, day_key: str) -> list[Profile]:
+    bag = list(items)
+    random.Random(day_key).shuffle(bag)
+    return bag
+
+
+def _interleave(tops: list[Profile], news: list[Profile]) -> list[Profile]:
+    """↑ · NEW · ↑ · NEW… then leftovers of the longer list."""
+    out: list[Profile] = []
+    i = j = 0
+    while i < len(tops) or j < len(news):
+        if i < len(tops):
+            out.append(tops[i])
+            i += 1
+        if j < len(news):
+            out.append(news[j])
+            j += 1
+    return out
+
+
+def _base_filters(
+    *,
+    viewer: User,
+    gender: str | None,
+    age_min: int | None,
+    age_max: int | None,
+    verified: bool | None,
+):
+    conds = [
+        Profile.status.in_(list(CATALOG_STATUSES)),
+        Profile.user_id != viewer.id,
+    ]
+    if gender in {"male", "female"}:
+        conds.append(Profile.gender == gender)
+    if age_min is not None:
+        conds.append(Profile.age >= age_min)
+    if age_max is not None:
+        conds.append(Profile.age <= age_max)
+    if verified:
+        conds.append(Profile.verification_status == VerificationStatus.VERIFIED.value)
+    return conds
+
+
 async def list_catalog(
     session: AsyncSession,
     *,
@@ -132,55 +223,95 @@ async def list_catalog(
     limit: int = PAGE_SIZE,
 ) -> tuple[list[Profile], dict[int, int], str | None]:
     now = datetime.now(timezone.utc)
-    stmt = (
+    day_key = now.astimezone(ROME).date().isoformat()
+    page = min(max(limit, 1), 50)
+    filters = _base_filters(
+        viewer=viewer, gender=gender, age_min=age_min, age_max=age_max, verified=verified
+    )
+
+    featured_stmt = (
         select(Profile)
         .where(
-            Profile.status.in_(list(CATALOG_STATUSES)),
-            Profile.user_id != viewer.id,
-        )
-        .options(selectinload(Profile.photos))
-    )
-    if gender in {"male", "female"}:
-        stmt = stmt.where(Profile.gender == gender)
-    if age_min is not None:
-        stmt = stmt.where(Profile.age >= age_min)
-    if age_max is not None:
-        stmt = stmt.where(Profile.age <= age_max)
-    if verified:
-        stmt = stmt.where(Profile.verification_status == VerificationStatus.VERIFIED.value)
-
-    sort_ts = _sort_ts()
-    is_top = _is_top_expr(now)
-    decoded = decode_catalog_cursor(cursor or "")
-    if decoded:
-        last_top, ts, pid = decoded
-        stmt = stmt.where(
+            *filters,
             or_(
-                is_top < last_top,
+                and_(Profile.top_until.is_not(None), Profile.top_until > now),
                 and_(
-                    is_top == last_top,
-                    or_(sort_ts < ts, and_(sort_ts == ts, Profile.id < pid)),
+                    Profile.paid_at.is_not(None),
+                    Profile.paid_at >= now - CATALOG_NEW_TTL,
                 ),
-            )
+                and_(
+                    Profile.paid_at.is_(None),
+                    Profile.approved_at.is_not(None),
+                    Profile.approved_at >= now - CATALOG_NEW_TTL,
+                ),
+            ),
         )
+        .options(selectinload(Profile.photos), selectinload(Profile.user))
+    )
+    featured_rows = list((await session.execute(featured_stmt)).scalars().unique().all())
+    tops = [p for p in featured_rows if is_top_now(p, now)]
+    news = [p for p in featured_rows if is_new_in_catalog(p, now)]
+    news.sort(key=lambda p: p.paid_at or p.approved_at or p.created_at, reverse=True)
+    featured = _interleave(_daily_shuffle(tops, day_key=f"top:{day_key}"), news)
+    featured_ids = {p.id for p in featured}
 
-    stmt = stmt.order_by(is_top.desc(), sort_ts.desc(), Profile.id.desc()).limit(
-        min(max(limit, 1), 50) + 1
-    )
-    profiles = list((await session.execute(stmt)).scalars().all())
-    has_more = len(profiles) > limit
-    profiles = profiles[:limit]
-    written = await written_profile_ids(
-        session, sender_id=viewer.id, profile_ids=[p.id for p in profiles]
-    )
-    next_cursor = None
-    if has_more and profiles:
-        last = profiles[-1]
-        stamp = last.published_at or last.paid_at or last.created_at
-        next_cursor = encode_catalog_cursor(
-            is_top=is_top_now(last, now), ts=stamp, profile_id=last.id
+    parsed = decode_feed_cursor(cursor or "")
+    phase = "f"
+    featured_offset = 0
+    rest_ts: datetime | None = None
+    rest_id = 0
+    if parsed:
+        phase, featured_offset, rest_ts, rest_id = parsed
+
+    page_items: list[Profile] = []
+    next_cursor: str | None = None
+
+    if phase == "f":
+        take = featured[featured_offset : featured_offset + page]
+        page_items.extend(take)
+        featured_offset += len(take)
+        if featured_offset < len(featured):
+            next_cursor = encode_feed_cursor(phase="f", featured_offset=featured_offset)
+        elif len(page_items) == page:
+            next_cursor = encode_feed_cursor(phase="r", ts=now, profile_id=0)
+
+    need = page - len(page_items)
+    if need > 0 and (phase == "r" or (phase == "f" and featured_offset >= len(featured) and next_cursor is None)):
+        rest_stmt = (
+            select(Profile)
+            .join(User, User.id == Profile.user_id)
+            .where(*filters)
+            .options(selectinload(Profile.photos), selectinload(Profile.user))
         )
-    return profiles, written, next_cursor
+        if featured_ids:
+            rest_stmt = rest_stmt.where(Profile.id.notin_(list(featured_ids)))
+        rest_rows = list((await session.execute(rest_stmt)).scalars().unique().all())
+        rest_rows.sort(key=lambda p: (_activity_ts(p), p.id), reverse=True)
+
+        start = 0
+        if phase == "r" and rest_ts is not None and rest_id:
+            start = len(rest_rows)
+            for idx, row in enumerate(rest_rows):
+                stamp = _activity_ts(row)
+                if stamp < rest_ts or (stamp == rest_ts and row.id < rest_id):
+                    start = idx
+                    break
+                if stamp == rest_ts and row.id == rest_id:
+                    start = idx + 1
+                    break
+
+        chunk = rest_rows[start : start + need]
+        page_items.extend(chunk)
+        if start + need < len(rest_rows) and chunk:
+            last = chunk[-1]
+            next_cursor = encode_feed_cursor(phase="r", ts=_activity_ts(last), profile_id=last.id)
+        else:
+            next_cursor = None
+
+    written = await written_profile_ids(
+        session, sender_id=viewer.id, profile_ids=[p.id for p in page_items]
+    )
+    return page_items, written, next_cursor
 
 
 async def get_catalog_profile(session: AsyncSession, profile_id: int) -> Profile | None:
@@ -193,12 +324,7 @@ async def get_catalog_profile(session: AsyncSession, profile_id: int) -> Profile
 
 
 def localized_catalog_fields(profile: Profile, viewer_lang: str) -> dict[str, str]:
-    """Return catalog text in the viewer's language when a cached translation exists.
-
-    Profiles are authored in the owner's language and translated for the opposite
-    audience (male → RU, female → IT). The Mini App must show that translation
-    to the matching viewer — channel captions already do; catalog previously did not.
-    """
+    """Return catalog text in the viewer's language when a cached translation exists."""
     from app.services.channel import source_language_for_profile
 
     lang = viewer_lang if viewer_lang in {"ru", "it"} else "ru"

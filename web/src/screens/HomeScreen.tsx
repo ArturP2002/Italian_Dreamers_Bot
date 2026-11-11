@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { homeAssets } from "../assets/backgrounds";
+import { BoostTopCta } from "../components/BoostTopCta";
 import { TricolorHeart } from "../components/TricolorHeart";
 import { LanguageToggle } from "../components/LanguageToggle";
 import { greetingKey, type Language, t, tf } from "../i18n/messages";
@@ -184,55 +185,79 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
 
       <h1 className="home-greeting">{greeting}</h1>
 
-      <article className="home-funnel">
-        <p className="home-funnel__eyebrow">{t(language, "homeYourProfile")}</p>
-        <h2 className="home-funnel__title">{funnelTitle}</h2>
-        {funnelHint ? <p className="home-funnel__hint">{funnelHint}</p> : null}
+      {isPublished ? (
+        <div className="home-boost-only">
+          <BoostTopCta
+            language={language}
+            verified={me?.verification_status === "verified"}
+            isTop={Boolean(me?.is_top)}
+            topUntil={me?.top_until}
+            starsOnly={language === "it"}
+          />
+        </div>
+      ) : (
+        <article className="home-funnel">
+          <p className="home-funnel__eyebrow">{t(language, "homeYourProfile")}</p>
+          <h2 className="home-funnel__title">{funnelTitle}</h2>
+          {funnelHint ? <p className="home-funnel__hint">{funnelHint}</p> : null}
 
-        <ol className="home-stepper" aria-label={t(language, "homeYourProfile")}>
-          {FUNNEL_STEPS.map((key, index) => {
-            const done = index < currentStep;
-            const current = index === currentStep && currentStep < 5;
-            return (
-              <li
-                key={key}
-                className={`home-stepper__item${done ? " is-done" : ""}${current ? " is-current" : ""}`}
-              >
-                <span className="home-stepper__dot" aria-hidden>
-                  {done ? "✓" : current ? <span className="home-stepper__pip" /> : null}
-                </span>
-                <span className="home-stepper__label">{t(language, key)}</span>
-              </li>
-            );
-          })}
-        </ol>
+          <ol className="home-stepper" aria-label={t(language, "homeYourProfile")}>
+            {FUNNEL_STEPS.map((key, index) => {
+              const done = index < currentStep;
+              const current = index === currentStep && currentStep < 5;
+              return (
+                <li
+                  key={key}
+                  className={`home-stepper__item${done ? " is-done" : ""}${current ? " is-current" : ""}`}
+                >
+                  <span className="home-stepper__dot" aria-hidden>
+                    {done ? "✓" : current ? <span className="home-stepper__pip" /> : null}
+                  </span>
+                  <span className="home-stepper__label">{t(language, key)}</span>
+                </li>
+              );
+            })}
+          </ol>
 
-        {needsProfile ? (
-          <Link to="/profile" className="btn btn--block btn--dark home-funnel__cta">
-            {t(language, "homeFillCta")}
-          </Link>
-        ) : null}
+          {needsProfile ? (
+            <Link to="/profile" className="btn btn--block btn--dark home-funnel__cta">
+              {t(language, "homeFillCta")}
+            </Link>
+          ) : null}
 
-        {isRejected ? (
-          <Link to="/profile" className="btn btn--block btn--dark home-funnel__cta">
-            {t(language, "homeFunnelFixCta")}
-          </Link>
-        ) : null}
+          {isRejected ? (
+            <Link to="/profile" className="btn btn--block btn--dark home-funnel__cta">
+              {t(language, "homeFunnelFixCta")}
+            </Link>
+          ) : null}
 
-        {awaitingPay ? (
-          <button
-            type="button"
-            className="btn btn--block btn--dark home-funnel__cta"
-            disabled={payBusy}
-            onClick={() => void onPay()}
-          >
-            {rub > 0
-              ? tf(language, "homeFunnelPayCtaRub", { rub: rub.toLocaleString("ru-RU"), stars })
-              : tf(language, "homeFunnelPayCta", { stars })}
-          </button>
-        ) : null}
-        {payMsg ? <p className="home-funnel__hint">{payMsg}</p> : null}
-      </article>
+          {awaitingPay ? (
+            <button
+              type="button"
+              className="btn btn--block btn--dark home-funnel__cta"
+              disabled={payBusy}
+              onClick={() => void onPay()}
+            >
+              {rub > 0
+                ? tf(language, "homeFunnelPayCtaRub", { rub: rub.toLocaleString("ru-RU"), stars })
+                : tf(language, "homeFunnelPayCta", { stars })}
+            </button>
+          ) : null}
+
+          {isQueued ? (
+            <BoostTopCta
+              language={language}
+              verified={me?.verification_status === "verified"}
+              isTop={Boolean(me?.is_top)}
+              topUntil={me?.top_until}
+              starsOnly={language === "it"}
+              className="home-funnel__boost"
+            />
+          ) : null}
+
+          {payMsg ? <p className="home-funnel__hint">{payMsg}</p> : null}
+        </article>
+      )}
 
       <div className="home-mosaic">
         <Link to="/catalog" className="home-card home-card--wide">

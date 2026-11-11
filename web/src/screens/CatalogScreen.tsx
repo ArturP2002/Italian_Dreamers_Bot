@@ -117,13 +117,16 @@ export function CatalogScreen({ language }: Props) {
         </button>
         <button
           type="button"
-          className={`admin-btn admin-filter${verifiedOnly ? " is-active" : ""}`}
+          className={`admin-btn admin-filter catalog-verified-filter${verifiedOnly ? " is-active" : ""}`}
           onClick={() => {
             const next = !verifiedOnly;
             setVerifiedOnly(next);
             void load(true, null, gender, next);
           }}
         >
+          <span className="catalog-card__badge catalog-card__badge--verified catalog-verified-filter__icon" aria-hidden>
+            ✓
+          </span>
           {t(language, "catalogVerifiedOnly")}
         </button>
       </div>
@@ -146,6 +149,10 @@ export function CatalogScreen({ language }: Props) {
                 {item.is_top ? (
                   <span className="catalog-card__badge catalog-card__badge--top" aria-hidden>
                     ↑
+                  </span>
+                ) : item.is_new ? (
+                  <span className="catalog-card__badge catalog-card__badge--new" aria-hidden>
+                    NEW
                   </span>
                 ) : null}
                 {item.verified ? (

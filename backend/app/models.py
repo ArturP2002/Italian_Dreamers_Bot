@@ -190,6 +190,9 @@ class User(Base):
         onupdate=func.now(),
         nullable=False,
     )
+    last_seen_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
 
     profile: Mapped[Profile | None] = relationship(
         back_populates="user",

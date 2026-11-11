@@ -1,16 +1,22 @@
-/* Design tokens from italian dreamers miniapp.pdf / New_Photo_For_Design palette */
+/* Design tokens — Inner Circle–aligned Inter / Inter Tight system */
 
 :root {
   --color-graphite: #1a1511;
   --color-card: #241d17;
   --color-cream: #efe4d2;
+  --color-cream-soft: #f3eee5;
   --color-milky: #f4eee4;
   --color-champagne: #c8a774;
   --color-secondary: #9c8f80;
 
-  --font-display: "Bebas Neue", Impact, sans-serif;
-  --font-accent: "Playfair Display", Georgia, serif;
-  --font-ui: "Poppins", system-ui, sans-serif;
+  /* Headings: Inter Tight Black, ALL CAPS, tracking −1% */
+  --font-display: "Inter Tight", "Inter", system-ui, sans-serif;
+  /* Greeting only (italic) */
+  --font-greeting: "Playfair Display", Georgia, serif;
+  /* Body / UI */
+  --font-ui: "Inter", system-ui, sans-serif;
+  /* Legacy alias — maps to greeting italic where still referenced */
+  --font-accent: var(--font-greeting);
 
   --radius-sm: 8px;
   --radius-md: 14px;
@@ -38,6 +44,7 @@ body,
 
 body {
   font-family: var(--font-ui);
+  font-weight: 400;
   background: var(--color-graphite);
   color: var(--color-cream);
   -webkit-font-smoothing: antialiased;
@@ -73,16 +80,26 @@ a {
 
 .heading-display {
   font-family: var(--font-display);
-  letter-spacing: 0.04em;
+  font-weight: 900;
+  letter-spacing: -0.01em;
   text-transform: uppercase;
   margin: 0;
 }
 
 .heading-accent {
-  font-family: var(--font-accent);
+  font-family: var(--font-greeting);
   font-style: italic;
   font-weight: 400;
   margin: 0;
+}
+
+.type-label {
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+  color: var(--color-secondary);
 }
 
 .btn {
@@ -90,8 +107,9 @@ a {
   border: 1px solid transparent;
   border-radius: 999px;
   padding: 14px 28px;
+  font-family: var(--font-ui);
   font-size: 15px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: transform 160ms ease, background 160ms ease, color 160ms ease, border-color 160ms ease;
 }

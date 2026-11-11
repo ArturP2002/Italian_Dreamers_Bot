@@ -28,6 +28,7 @@ from app.models import (
     User,
 )
 from app.services.entitlements import (
+    CATALOG_TOP_PERIOD,
     SUBSCRIPTION_PERIOD,
     active_subscription,
     apply_top_for_user,
@@ -805,11 +806,11 @@ async def send_catalog_top_invoice(
 ) -> None:
     lang = user.language_code if user.language_code in {"ru", "it"} else "ru"
     if lang == "it":
-        title = "Cima del catalogo"
-        description = f"30 giorni in cima al catalogo Mini App per {profile.name}."
+        title = "Porta il profilo in alto"
+        description = f"7 giorni in cima al catalogo Mini App per {profile.name}."
     else:
-        title = "Топ каталога"
-        description = f"30 дней в топе каталога Mini App для {profile.name}."
+        title = "Подними анкету в топ"
+        description = f"7 дней в топе каталога Mini App для {profile.name}."
     await send_invoice_stars(
         settings,
         user.telegram_id,
@@ -836,9 +837,9 @@ async def complete_catalog_top_payment(
     payment.completed_at = utcnow()
     _mark_provider_paid(payment, provider_payment_id=telegram_charge_id)
     session.add(payment)
-    until = utcnow() + SUBSCRIPTION_PERIOD
+    until = utcnow() + CATALOG_TOP_PERIOD
     if profile.top_until and profile.top_until > utcnow():
-        until = profile.top_until + SUBSCRIPTION_PERIOD
+        until = profile.top_until + CATALOG_TOP_PERIOD
     apply_top_until(profile, until)
     session.add(profile)
     await session.commit()
@@ -849,9 +850,9 @@ async def complete_catalog_top_payment(
     lang = user.language_code if user.language_code in {"ru", "it"} else "ru"
     stamp = profile.top_until.strftime("%d.%m.%Y") if profile.top_until else "—"
     if lang == "it":
-        text = f"✅ Sei in cima al catalogo fino al <b>{stamp}</b>."
+        text = f"✅ Sei in cima al catalogo fino al <b>{stamp}</b> (7 giorni)."
     else:
-        text = f"✅ Анкета в топе каталога до <b>{stamp}</b>."
+        text = f"✅ Анкета в топе каталога до <b>{stamp}</b> (7 дней)."
     await send_message(settings, user.telegram_id, text)
     return profile
 

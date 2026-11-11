@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { guideAssets, guidePhotos, introVideo, wizardStepPhotos } from "../assets/backgrounds";
+import { BoostTopCta } from "../components/BoostTopCta";
 import { PhotoGuideSheet } from "../components/PhotoGuideSheet";
 import { VideoNote } from "../components/VideoNote";
 import { COVER_QUESTIONS, type Language, type MessageKey, tf, t } from "../i18n/messages";
@@ -580,6 +581,16 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
             <button type="button" className="btn btn--dark btn--block" onClick={openPost}>
               {t(language, "myProfileOpenPost")}
             </button>
+          ) : null}
+          {status === "queued" || status === "published" ? (
+            <BoostTopCta
+              language={language}
+              verified={me?.verification_status === "verified"}
+              isTop={Boolean(me?.is_top)}
+              topUntil={me?.top_until}
+              starsOnly={language === "it"}
+              className="my-profile-boost"
+            />
           ) : null}
         </div>
 

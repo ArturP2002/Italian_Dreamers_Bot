@@ -18,6 +18,11 @@ export function LoadingScreen({ mode, onEnter }: Props) {
         decoding="async"
       />
       <div className="loading-screen__veil" aria-hidden />
+      <div className="loading-screen__brand" aria-hidden>
+        <p className="loading-screen__logo">Dreamers</p>
+        <p className="loading-screen__tagline-ru">Вы ближе</p>
+        <p className="loading-screen__tagline-it">Siete più vicini</p>
+      </div>
       {mode === "choose" ? (
         <div className="loading-screen__actions">
           <button type="button" className="btn btn--cream" onClick={() => onEnter("ru")}>
