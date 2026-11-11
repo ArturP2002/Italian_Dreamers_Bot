@@ -5,8 +5,11 @@ from __future__ import annotations
 from aiogram import Bot, Router
 from aiogram.filters import Command
 from aiogram.types import BotCommand, Message
+from sqlalchemy import select
 
 from app.config import Settings, get_settings
+from app.database import async_session_factory
+from app.models import User
 
 router = Router(name="info")
 
@@ -32,9 +35,20 @@ async def set_bot_commands(bot: Bot) -> None:
         await bot.set_my_commands(commands, language_code=lang)
 
 
-def _lang(message: Message) -> str:
+async def _lang(message: Message) -> str:
     code = (message.from_user.language_code or "ru")[:2] if message.from_user else "ru"
-    return code if code in {"ru", "it"} else "ru"
+    telegram_lang = code if code in {"ru", "it"} else "ru"
+    if message.from_user is None:
+        return telegram_lang
+    try:
+        async with async_session_factory() as session:
+            result = await session.execute(select(User).where(User.telegram_id == message.from_user.id))
+            user = result.scalar_one_or_none()
+            if user is not None and user.language_code in {"ru", "it"}:
+                return user.language_code
+    except Exception:
+        pass
+    return telegram_lang
 
 
 def _support_contact(settings: Settings) -> str:
@@ -111,13 +125,16 @@ def _terms_text(settings: Settings, lang: str) -> str:
 
 @router.message(Command("terms"))
 async def cmd_terms(message: Message) -> None:
-    await message.answer(_terms_text(get_settings(), _lang(message)), disable_web_page_preview=True)
+    await message.answer(
+        _terms_text(get_settings(), await _lang(message)),
+        disable_web_page_preview=True,
+    )
 
 
 @router.message(Command("support"))
 async def cmd_support(message: Message) -> None:
     contact = _support_contact(get_settings())
-    if _lang(message) == "it":
+    if await _lang(message) == "it":
         text = (
             "<b>Assistenza Italian Dreamers</b>\n\n"
             f"Per domande sul profilo, sulle lettere o sulla chat scrivi a {contact}.\n"
@@ -137,7 +154,7 @@ async def cmd_support(message: Message) -> None:
 @router.message(Command("paysupport"))
 async def cmd_paysupport(message: Message) -> None:
     contact = _support_contact(get_settings())
-    if _lang(message) == "it":
+    if await _lang(message) == "it":
         text = (
             "<b>Pagamenti</b>\n\n"
             f"Per domande su un pagamento in Stars o per un rimborso scrivi a {contact}.\n"

@@ -40,24 +40,51 @@ REJECT_PRESETS = [
     {
         "id": "photos",
         "text": "Пожалуйста, загрузите другие фото: лицо крупным планом, без сильных фильтров, три разных снимка.",
+        "text_it": (
+            "Per favore carica altre foto: volto in primo piano, senza filtri forti, "
+            "tre scatti diversi."
+        ),
     },
     {
         "id": "blurry",
         "text": "Фото слишком тёмные или размытые. Нужны чёткие фото, где вас хорошо видно.",
+        "text_it": "Le foto sono troppo scure o sfocate. Servono scatti nitidi in cui si vede bene.",
     },
     {
         "id": "about",
         "text": "Расскажите о себе подробнее: кто вы, чем живёте, кого ищете. Сейчас текста мало для публикации.",
+        "text_it": (
+            "Racconta di più di te: chi sei, come vivi, chi cerchi. "
+            "Ora c’è troppo poco testo per la pubblicazione."
+        ),
     },
     {
         "id": "age",
         "text": "Возраст или данные в анкете выглядят недостоверно. Проверьте поля и отправьте снова.",
+        "text_it": (
+            "L’età o i dati del profilo non sembrano attendibili. "
+            "Controlla i campi e invia di nuovo."
+        ),
     },
     {
         "id": "rules",
         "text": "Анкета не соответствует правилам. Уберите контакты, рекламу и ссылки — и отправьте снова.",
+        "text_it": (
+            "Il profilo non rispetta le regole. Rimuovi contatti, pubblicità e link — "
+            "poi invia di nuovo."
+        ),
     },
 ]
+
+
+def localize_reject_feedback(feedback: str, lang: str) -> str:
+    cleaned = (feedback or "").strip()
+    if lang != "it" or not cleaned:
+        return cleaned
+    for preset in REJECT_PRESETS:
+        if cleaned == preset["text"] and preset.get("text_it"):
+            return str(preset["text_it"])
+    return cleaned
 
 
 def app_tz(settings: Settings) -> ZoneInfo:
@@ -269,7 +296,13 @@ async def reject_profile(
     if user is None:
         result = await session.execute(select(User).where(User.id == profile.user_id))
         user = result.scalar_one()
-    await notify_user_profile_rejected(settings, user=user, profile=profile, feedback=feedback)
+    lang = user.language_code if user.language_code in {"ru", "it"} else "ru"
+    await notify_user_profile_rejected(
+        settings,
+        user=user,
+        profile=profile,
+        feedback=localize_reject_feedback(feedback, lang),
+    )
     return await get_profile_admin(session, profile.id)  # type: ignore[return-value]
 
 

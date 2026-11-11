@@ -291,7 +291,9 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
           ) : null}
           <div className="home-card__body">
             <h3 className="home-card__title">
-              <span aria-hidden>🤍 </span>
+              <span className="home-card__heart" aria-hidden>
+                🤍
+              </span>{" "}
               {t(language, "homeLikes")}
             </h3>
             <p className="home-card__hint">{t(language, "homeLikesHint")}</p>

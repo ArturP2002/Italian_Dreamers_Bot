@@ -20,18 +20,30 @@ logger = logging.getLogger(__name__)
 router = Router(name="payments")
 
 
+def _checkout_lang(query: PreCheckoutQuery) -> str:
+    code = (query.from_user.language_code or "ru")[:2] if query.from_user else "ru"
+    return code if code in {"ru", "it"} else "ru"
+
+
 @router.pre_checkout_query()
 async def on_pre_checkout(query: PreCheckoutQuery) -> None:
     payload = query.invoice_payload or ""
+    lang = _checkout_lang(query)
     kind = parse_any_payment_payload(payload)
     if kind is None:
-        await query.answer(ok=False, error_message="Unknown invoice")
+        await query.answer(
+            ok=False,
+            error_message="Fattura sconosciuta" if lang == "it" else "Unknown invoice",
+        )
         return
 
     async with async_session_factory() as session:
         payment = await get_payment_by_payload(session, payload)
         if payment is None:
-            await query.answer(ok=False, error_message="Payment not found")
+            await query.answer(
+                ok=False,
+                error_message="Pagamento non trovato" if lang == "it" else "Payment not found",
+            )
             return
         allowed = {
             PaymentProduct.PROFILE_PUBLISH.value,
@@ -42,17 +54,28 @@ async def on_pre_checkout(query: PreCheckoutQuery) -> None:
             PaymentProduct.CATALOG_TOP.value,
         }
         if payment.product not in allowed:
-            await query.answer(ok=False, error_message="Unsupported product")
+            await query.answer(
+                ok=False,
+                error_message="Prodotto non supportato" if lang == "it" else "Unsupported product",
+            )
             return
         if payment.stars_amount != query.total_amount:
-            await query.answer(ok=False, error_message="Amount mismatch")
+            await query.answer(
+                ok=False,
+                error_message="Importo non corrispondente" if lang == "it" else "Amount mismatch",
+            )
             return
         # Recurring Stars charges reuse the original payload after the first payment.
         if payment.status == PaymentStatus.COMPLETED.value and payment.product == PaymentProduct.UNLIMITED_SUB.value:
             await query.answer(ok=True)
             return
         if payment.status != PaymentStatus.PENDING.value:
-            await query.answer(ok=False, error_message="Счёт устарел. Используйте последний счёт в чате.")
+            err = (
+                "Fattura scaduta. Usa l’ultima fattura in chat."
+                if lang == "it"
+                else "Счёт устарел. Используйте последний счёт в чате."
+            )
+            await query.answer(ok=False, error_message=err)
             return
 
     await query.answer(ok=True)

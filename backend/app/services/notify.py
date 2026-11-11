@@ -101,7 +101,7 @@ async def notify_user_profile_rejected(
     lang = user.language_code if user.language_code in {"ru", "it"} else "ru"
     if lang == "it":
         text = (
-            f"Анкета отклонена / Profilo rifiutato.\n\n"
+            f"Profilo rifiutato.\n\n"
             f"<b>Cosa correggere:</b>\n{feedback.strip()}\n\n"
             "Puoi modificare il profilo nell’app e inviarlo di nuovo."
         )

@@ -489,6 +489,8 @@
   line-height: 1.15;
   letter-spacing: -0.01em;
   text-transform: uppercase;
+  /* Keep short titles (Симпатии) level with 2-line ones (Мои сообщения) */
+  min-height: calc(1.15em * 2);
 }
 
 .home-card__title em {
@@ -496,8 +498,17 @@
   font-weight: 900;
 }
 
+.home-card__heart {
+  display: inline-block;
+  font-size: 0.85em;
+  line-height: 1;
+  vertical-align: 0.05em;
+  margin-right: 2px;
+}
+
 .home-card--wide .home-card__title {
   font-size: 22px;
+  min-height: 0;
 }
 
 .home-card__hint {
@@ -505,6 +516,7 @@
   font-size: 12px;
   line-height: 1.35;
   color: rgba(255, 255, 255, 0.88);
+  min-height: calc(1.35em * 2);
 }
 
 /* Photo 3 badge style: dark translucent pill, no champagne dot */
