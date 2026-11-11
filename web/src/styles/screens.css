@@ -3017,8 +3017,8 @@
 
 .catalog-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
   max-width: 100%;
 }
 
@@ -3061,57 +3061,57 @@
 .catalog-card__badge {
   position: absolute;
   z-index: 2;
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   display: grid;
   place-items: center;
-  font-size: 14px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
 .catalog-card__badge--top {
-  top: 8px;
-  left: 8px;
+  top: 6px;
+  left: 6px;
   background: rgba(26, 21, 16, 0.75);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   color: #e8d4a8;
-  font-size: 15px;
+  font-size: 12px;
 }
 
 .catalog-card__badge--new {
-  top: 8px;
-  left: 8px;
+  top: 6px;
+  left: 6px;
   width: auto;
-  height: 22px;
+  height: 18px;
   min-width: 0;
-  padding: 0 8px;
+  padding: 0 6px;
   border-radius: 999px;
   background: rgba(26, 21, 16, 0.72);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   color: #fff;
-  font-size: 9px;
+  font-size: 8px;
   letter-spacing: 0.06em;
   font-weight: 700;
 }
 
 .catalog-card__badge--verified {
-  top: 8px;
-  left: 8px;
+  top: 6px;
+  left: 6px;
   background: #dcecdd;
   color: #2f9b55;
-  font-size: 13px;
+  font-size: 11px;
 }
 
 .catalog-card__badge--verified.catalog-card__badge--offset {
   left: auto;
   right: auto;
-  top: 40px;
-  left: 8px;
+  top: 32px;
+  left: 6px;
 }
 
 .home-boost-only {
@@ -3472,8 +3472,8 @@
   z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 48px 12px 12px;
+  gap: 1px;
+  padding: 36px 8px 8px;
   text-decoration: none;
   color: #fff;
   background: linear-gradient(
@@ -3488,12 +3488,15 @@
 .catalog-card__link span,
 .catalog-card__link em {
   padding: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .catalog-card__link strong {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 14px;
+  font-size: 11px;
   font-weight: 900;
   letter-spacing: -0.01em;
   text-transform: uppercase;
@@ -3501,13 +3504,13 @@
 }
 
 .catalog-card__link span {
-  font-size: 12px;
+  font-size: 10px;
   font-style: normal;
   color: rgba(255, 255, 255, 0.78);
 }
 
 .catalog-card__link em {
-  font-size: 11px;
+  font-size: 9px;
   font-style: normal;
   color: rgba(255, 255, 255, 0.7);
 }
@@ -3531,6 +3534,15 @@
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
   transition: transform 160ms ease, background 160ms ease;
+}
+
+.catalog-grid .like-heart {
+  width: 30px;
+  height: 30px;
+}
+
+.catalog-grid .like-heart__glyph {
+  font-size: 16px;
 }
 
 .like-heart:active {
@@ -3561,8 +3573,8 @@
 
 .like-heart--card-br {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 6px;
+  right: 6px;
   bottom: auto;
   z-index: 3;
 }
