@@ -17,8 +17,10 @@ from app.services.catalog import (
     default_catalog_gender,
     get_catalog_profile,
     list_catalog,
+    localized_catalog_fields,
     written_profile_ids,
 )
+from app.services.channel import ensure_profile_translated
 from app.services.entitlements import is_top_now
 from app.services.likes import LikeServiceError, liked_profile_ids, matched_profile_ids, toggle_like
 from app.services.profiles import get_user_profile
@@ -64,20 +66,27 @@ class CatalogProfileOut(CatalogCard):
     published_at: datetime | None = None
 
 
+def _viewer_lang(auth: AuthContext) -> str:
+    code = (auth.user.language_code or "ru")[:2]
+    return code if code in {"ru", "it"} else "ru"
+
+
 def _card(
     profile: Profile,
     written: dict[int, int],
     *,
     liked: bool = False,
     matched: bool = False,
+    fields: dict[str, str] | None = None,
 ) -> CatalogCard:
     request_id = written.get(profile.id)
+    loc = fields or {}
     return CatalogCard(
         id=profile.id,
-        name=profile.name,
+        name=loc.get("name") or profile.name,
         age=profile.age,
-        city=profile.city,
-        country=profile.country,
+        city=loc.get("city") or profile.city,
+        country=loc.get("country") or profile.country,
         gender=profile.gender,
         photo_urls=card_photos(profile),
         already_written=request_id is not None,
@@ -125,8 +134,18 @@ async def catalog_feed(
         viewer_profile_id=own.id if own else None,
         profile_ids=ids,
     )
+    lang = _viewer_lang(auth)
     return CatalogPage(
-        items=[_card(p, written, liked=p.id in liked, matched=p.id in matched) for p in profiles],
+        items=[
+            _card(
+                p,
+                written,
+                liked=p.id in liked,
+                matched=p.id in matched,
+                fields=localized_catalog_fields(p, lang),
+            )
+            for p in profiles
+        ],
         next_cursor=next_cursor,
         gender=chosen,
     )
@@ -137,10 +156,13 @@ async def catalog_detail(
     profile_id: int,
     auth: AuthContext = Depends(get_auth_context),
     session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
 ) -> CatalogProfileOut:
     profile = await get_catalog_profile(session, profile_id)
     if profile is None:
         raise HTTPException(status_code=404, detail="Profile not found")
+    # Make sure opposite-audience translation exists (same cache as channel captions).
+    await ensure_profile_translated(session, settings, profile)
     written = await written_profile_ids(session, sender_id=auth.user.id, profile_ids=[profile.id])
     liked = await liked_profile_ids(session, auth.user.id, [profile.id])
     own = await get_user_profile(session, auth.user.id)
@@ -150,14 +172,21 @@ async def catalog_detail(
         viewer_profile_id=own.id if own else None,
         profile_ids=[profile.id],
     )
-    card = _card(profile, written, liked=profile.id in liked, matched=profile.id in matched)
+    fields = localized_catalog_fields(profile, _viewer_lang(auth))
+    card = _card(
+        profile,
+        written,
+        liked=profile.id in liked,
+        matched=profile.id in matched,
+        fields=fields,
+    )
     return CatalogProfileOut(
         **card.model_dump(),
         height_cm=profile.height_cm,
-        profession=profile.profession,
-        hobbies=profile.hobbies,
-        about=profile.about,
-        desired_partner=profile.desired_partner,
+        profession=fields.get("profession") or profile.profession,
+        hobbies=fields.get("hobbies") or profile.hobbies,
+        about=fields.get("about") or profile.about,
+        desired_partner=fields.get("desired_partner") or profile.desired_partner,
         age_min=profile.age_min,
         age_max=profile.age_max,
         has_children=profile.has_children,

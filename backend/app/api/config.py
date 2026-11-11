@@ -14,12 +14,16 @@ async def public_config(settings: Settings = Depends(get_settings)) -> dict:
         "prices": {
             "message_credit_stars": settings.price_message_credit_stars,
             "message_pack_10_stars": settings.price_message_pack_10_stars,
+            "message_credit_rub": settings.price_message_credit_rub,
+            "message_pack_10_rub": settings.price_message_pack_10_rub,
             "message_pack_size": settings.message_pack_size,
             "profile_publish_stars": settings.price_profile_publish_stars,
             "profile_publish_rub": settings.price_profile_publish_rub,
             "ad_slot_stars": settings.price_ad_slot_stars,
             "unlimited_sub_stars": settings.price_unlimited_sub_stars,
+            "unlimited_sub_rub": settings.price_unlimited_sub_rub,
             "catalog_top_stars": settings.price_catalog_top_stars,
+            "catalog_top_rub": settings.price_catalog_top_rub,
         },
         "limits": {
             "contact_per_hour": settings.rate_contact_per_hour,

@@ -49,11 +49,11 @@ class Settings(BaseSettings):
     # Telegram Stars recurring period (seconds). Bot API currently allows 2592000 = 30 days.
     subscription_period_seconds: int = Field(alias="SUBSCRIPTION_PERIOD_SECONDS", default=2592000)
     # Reserved for YooKassa later — unused in this wave.
-    price_message_credit_rub: int = Field(alias="PRICE_MESSAGE_CREDIT_RUB", default=0)
-    price_message_pack_10_rub: int = Field(alias="PRICE_MESSAGE_PACK_10_RUB", default=0)
+    price_message_credit_rub: int = Field(alias="PRICE_MESSAGE_CREDIT_RUB", default=200)
+    price_message_pack_10_rub: int = Field(alias="PRICE_MESSAGE_PACK_10_RUB", default=1000)
     price_profile_publish_rub: int = Field(alias="PRICE_PROFILE_PUBLISH_RUB", default=0)
     price_ad_slot_rub: int = Field(alias="PRICE_AD_SLOT_RUB", default=0)
-    price_unlimited_sub_rub: int = Field(alias="PRICE_UNLIMITED_SUB_RUB", default=0)
+    price_unlimited_sub_rub: int = Field(alias="PRICE_UNLIMITED_SUB_RUB", default=2000)
     price_catalog_top_rub: int = Field(alias="PRICE_CATALOG_TOP_RUB", default=0)
 
     # Telegram username (without @) shown by /support and /paysupport.

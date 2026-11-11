@@ -1,15 +1,18 @@
-"""OpenAI vision: is there a person in the photo?"""
+"""OpenAI vision: person present and not a group photo."""
 
 from __future__ import annotations
 
 import base64
 import logging
+from typing import Literal
 
 import httpx
 
-from app.services.translate import OPENAI_CHAT_URL, DEFAULT_MODEL
+from app.services.translate import DEFAULT_MODEL, OPENAI_CHAT_URL
 
 logger = logging.getLogger(__name__)
+
+PhotoCheck = Literal["ok", "no_person", "group"]
 
 
 class VisionError(Exception):
@@ -19,23 +22,26 @@ class VisionError(Exception):
         self.message = message
 
 
-async def photo_has_person(
+async def assess_profile_photo(
     image_bytes: bytes,
     *,
     mime: str,
     api_key: str | None,
     model: str = DEFAULT_MODEL,
-) -> bool:
-    """Return True if a person is visible. If no API key, skip the check (allow)."""
+) -> PhotoCheck:
+    """Classify photo: ok (exactly one person), no_person, or group (2+ people).
+
+    If no API key or the API fails, allow the upload (`ok`) so local/dev keeps working.
+    """
     if not api_key:
-        return True
+        return "ok"
     if not image_bytes:
         raise VisionError("photo_required", "Empty image")
     b64 = base64.b64encode(image_bytes).decode("ascii")
     data_url = f"data:{mime};base64,{b64}"
     payload = {
         "model": model,
-        "max_tokens": 20,
+        "max_tokens": 10,
         "messages": [
             {
                 "role": "user",
@@ -43,8 +49,13 @@ async def photo_has_person(
                     {
                         "type": "text",
                         "text": (
-                            "Does this photo show a real human person (face or body)? "
-                            "Answer only YES or NO."
+                            "Count how many distinct real human people are clearly visible "
+                            "in this photo (face and/or body). Ignore statues, drawings, "
+                            "posters and tiny background silhouettes.\n"
+                            "Reply with exactly one word:\n"
+                            "NONE — no real person\n"
+                            "ONE — exactly one person\n"
+                            "MULTI — two or more people"
                         ),
                     },
                     {"type": "image_url", "image_url": {"url": data_url, "detail": "low"}},
@@ -63,10 +74,36 @@ async def photo_has_person(
             data = response.json()
     except Exception:
         logger.exception("Vision API failed")
-        return True
+        return "ok"
+
     text = (
         ((data.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
     ).strip().upper()
-    if text.startswith("NO"):
-        return False
-    return True
+    token = text.split()[0] if text else ""
+    token = token.strip(".,:;!\"'")
+    if token.startswith("MULTI") or token in {"MANY", "GROUP", "TWO", "2+"}:
+        return "group"
+    if token.startswith("NONE") or token == "NO" or token == "ZERO":
+        return "no_person"
+    if token.startswith("ONE") or token == "1" or token == "YES":
+        return "ok"
+    # Ambiguous model reply — be strict on MULTI mentions, else allow.
+    if "MULTI" in text or "TWO" in text or "GROUP" in text:
+        return "group"
+    if "NONE" in text or text.startswith("NO"):
+        return "no_person"
+    return "ok"
+
+
+async def photo_has_person(
+    image_bytes: bytes,
+    *,
+    mime: str,
+    api_key: str | None,
+    model: str = DEFAULT_MODEL,
+) -> bool:
+    """Backward-compatible helper: True if at least one person is present and not a group. """
+    result = await assess_profile_photo(
+        image_bytes, mime=mime, api_key=api_key, model=model
+    )
+    return result == "ok"

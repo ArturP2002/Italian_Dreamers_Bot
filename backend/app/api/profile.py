@@ -260,7 +260,10 @@ async def upload_photo(
     file: UploadFile = File(...),
     auth: AuthContext = Depends(get_auth_context),
     session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
 ) -> ProfileOut:
+    from app.services.vision import assess_profile_photo
+
     profile = await get_or_create_draft(session, auth.user)
     try:
         assert_editable(profile)
@@ -285,6 +288,23 @@ async def upload_photo(
         raise HTTPException(status_code=400, detail="File too large (max 8MB)")
     if not raw:
         raise HTTPException(status_code=400, detail="Empty file")
+
+    check = await assess_profile_photo(
+        raw,
+        mime=content_type if content_type.startswith("image/") else "image/jpeg",
+        api_key=settings.translation_api_key,
+        model=settings.openai_vision_model,
+    )
+    if check == "no_person":
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "no_person", "message": "Photo must show a person"},
+        )
+    if check == "group":
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "group_photo", "message": "Photo must show only one person"},
+        )
 
     filename = f"{uuid.uuid4().hex}{ext}"
     dest = MEDIA_ROOT / filename

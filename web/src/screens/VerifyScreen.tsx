@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { PhotoGuideSheet } from "../components/PhotoGuideSheet";
 import { type Language, t } from "../i18n/messages";
 import { fetchMe, uploadVerificationSelfie } from "../lib/api";
 
@@ -9,6 +10,7 @@ export function VerifyScreen({ language, onRefresh }: Props) {
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [photoGuideOpen, setPhotoGuideOpen] = useState(false);
 
   useEffect(() => {
     void fetchMe().then((me) => setStatus(me?.verification_status ?? "none"));
@@ -22,8 +24,14 @@ export function VerifyScreen({ language, onRefresh }: Props) {
       const res = await uploadVerificationSelfie(file);
       setStatus(res.verification_status);
       onRefresh?.();
-    } catch {
-      setError(t(language, "writeNoPerson"));
+    } catch (e) {
+      const raw = e instanceof Error ? e.message : "";
+      if (raw.includes("group_photo")) {
+        setPhotoGuideOpen(true);
+        setError(t(language, "photoGroupRejected"));
+      } else {
+        setError(t(language, "writeNoPerson"));
+      }
     } finally {
       setBusy(false);
     }
@@ -52,6 +60,11 @@ export function VerifyScreen({ language, onRefresh }: Props) {
         </label>
       ) : null}
       {error ? <p className="form-error">{error}</p> : null}
+      <PhotoGuideSheet
+        language={language}
+        open={photoGuideOpen}
+        onClose={() => setPhotoGuideOpen(false)}
+      />
     </section>
   );
 }

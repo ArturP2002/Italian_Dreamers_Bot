@@ -294,12 +294,16 @@ export type PublicConfig = {
   prices: {
     message_credit_stars: number;
     message_pack_10_stars: number;
+    message_credit_rub?: number;
+    message_pack_10_rub?: number;
     message_pack_size: number;
     profile_publish_stars: number;
     profile_publish_rub?: number;
     ad_slot_stars: number;
     unlimited_sub_stars?: number;
+    unlimited_sub_rub?: number;
     catalog_top_stars?: number;
+    catalog_top_rub?: number;
   };
   limits: Record<string, number>;
   timezone: string;
@@ -516,10 +520,10 @@ export async function submitProfile(): Promise<Profile> {
   return apiFetchJsonOrThrow<Profile>("/api/me/profile/submit", { method: "POST" });
 }
 
-export async function uploadProfilePhoto(file: File): Promise<Profile | null> {
+export async function uploadProfilePhoto(file: File): Promise<Profile> {
   const body = new FormData();
   body.append("file", file);
-  return apiFetch<Profile>("/api/me/profile/photos", { method: "POST", body });
+  return apiFetchJsonOrThrow<Profile>("/api/me/profile/photos", { method: "POST", body });
 }
 
 export async function deleteProfilePhoto(photoId: number): Promise<Profile | null> {

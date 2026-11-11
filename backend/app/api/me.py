@@ -23,7 +23,7 @@ from app.services.payments import (
 from app.services.username_nudge import CHECK_BUTTON, MISS_TEXT, OK_TEXT, check_and_store_username, _lang
 from app.services.telegram_api import TelegramApiError
 from app.services.verification import VerificationError, submit_selfie
-from app.services.vision import photo_has_person
+from app.services.vision import assess_profile_photo
 
 
 def _invoice_or_502(exc: TelegramApiError) -> HTTPException:
@@ -251,10 +251,19 @@ async def upload_verification_selfie(
     raw = await file.read()
     if not raw or len(raw) > 8 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Invalid file")
-    if not await photo_has_person(
-        raw, mime=content_type or "image/jpeg", api_key=settings.translation_api_key, model=settings.openai_vision_model
-    ):
-        raise HTTPException(status_code=400, detail="selfie_no_person")
+    check = await assess_profile_photo(
+        raw,
+        mime=content_type or "image/jpeg",
+        api_key=settings.translation_api_key,
+        model=settings.openai_vision_model,
+    )
+    if check == "no_person":
+        raise HTTPException(status_code=400, detail={"code": "selfie_no_person", "message": "Selfie must show a person"})
+    if check == "group":
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "group_photo", "message": "Selfie must show only one person"},
+        )
     ext = ".jpg"
     if "png" in content_type:
         ext = ".png"

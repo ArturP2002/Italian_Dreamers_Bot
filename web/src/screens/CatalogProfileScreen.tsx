@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { LikeHeart, MatchBanner } from "../components/LikeHeart";
+import { PhotoLightbox } from "../components/PhotoLightbox";
 import { type Language, t } from "../i18n/messages";
 import { fetchCatalogProfile, mediaUrl, toggleCatalogLike, type CatalogProfile } from "../lib/api";
 
@@ -10,6 +11,7 @@ export function CatalogProfileScreen({ language }: Props) {
   const { id } = useParams();
   const profileId = Number(id);
   const [profile, setProfile] = useState<CatalogProfile | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (!Number.isFinite(profileId)) return;
@@ -27,6 +29,9 @@ export function CatalogProfileScreen({ language }: Props) {
     );
   }
 
+  const photos = profile.photo_urls.map((url) => mediaUrl(url)).filter(Boolean) as string[];
+  const heightUnit = language === "it" ? "cm" : "см";
+
   return (
     <section className="screen screen--milky">
       <Link to="/catalog" className="work-back">
@@ -35,7 +40,14 @@ export function CatalogProfileScreen({ language }: Props) {
       <div className="catalog-detail-photos">
         {profile.photo_urls.map((url, index) => (
           <div key={url} className="catalog-detail-photos__item">
-            <img src={mediaUrl(url)} alt="" />
+            <button
+              type="button"
+              className="catalog-detail-photos__open"
+              onClick={() => setLightboxIndex(index)}
+              aria-label={`${profile.name} ${index + 1}`}
+            >
+              <img src={mediaUrl(url)} alt="" />
+            </button>
             {index === 0 && !profile.is_mine ? (
               <LikeHeart
                 liked={profile.liked}
@@ -61,7 +73,7 @@ export function CatalogProfileScreen({ language }: Props) {
         {profile.city}
         {profile.country ? `, ${profile.country}` : ""}
         {profile.profession ? ` · ${profile.profession}` : ""}
-        {profile.height_cm ? ` · ${profile.height_cm} см` : ""}
+        {profile.height_cm ? ` · ${profile.height_cm} ${heightUnit}` : ""}
       </p>
       {profile.status === "queued" ? <p className="home-meta">{t(language, "catalogQueued")}</p> : null}
 
@@ -107,6 +119,16 @@ export function CatalogProfileScreen({ language }: Props) {
           </Link>
         )}
       </div>
+
+      {lightboxIndex != null ? (
+        <PhotoLightbox
+          urls={photos}
+          index={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onIndexChange={setLightboxIndex}
+          closeLabel="×"
+        />
+      ) : null}
     </section>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { guideAssets, guidePhotos, introVideo, wizardStepPhotos } from "../assets/backgrounds";
+import { PhotoGuideSheet } from "../components/PhotoGuideSheet";
 import { VideoNote } from "../components/VideoNote";
 import { COVER_QUESTIONS, type Language, type MessageKey, tf, t } from "../i18n/messages";
 import {
@@ -110,6 +111,7 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [photoGuideOpen, setPhotoGuideOpen] = useState(false);
   const [gender, setGender] = useState<"male" | "female" | null>(
     me?.gender === "male" || me?.gender === "female" ? me.gender : null,
   );
@@ -347,15 +349,23 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
     let latest = profile;
     for (const file of files.slice(0, REQUIRED_PHOTOS)) {
       if ((latest?.photos.length ?? 0) >= REQUIRED_PHOTOS) break;
-      const updated = await uploadProfilePhoto(file);
-      if (!updated) {
-        setError(t(language, "errorGeneric"));
+      try {
+        const updated = await uploadProfilePhoto(file);
+        latest = updated;
+        setProfile(updated);
+      } catch (e) {
+        const raw = e instanceof Error ? e.message : "";
+        if (raw.includes("group_photo")) {
+          setPhotoGuideOpen(true);
+          setError(t(language, "photoGroupRejected"));
+        } else if (raw.includes("no_person")) {
+          setError(t(language, "writeNoPerson"));
+        } else {
+          setError(t(language, "errorGeneric"));
+        }
         break;
       }
-      latest = updated;
-      setProfile(updated);
     }
-    // Refresh from server in case response was partial
     const refreshed = await fetchProfile();
     if (refreshed) setProfile(refreshed);
     setBusy(false);
@@ -553,7 +563,7 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
       profile?.wants_children === "yes" ? "yes" : profile?.wants_children === "no" ? "no" : "unsure";
     return (
       <section className="screen screen--milky">
-        <Link to="/" className="work-back">
+        <Link to="/" className="work-back work-back--sticky">
           ← {t(language, "backHome")}
         </Link>
         <h1 className="wizard-title">{t(language, "myProfileTitle")}</h1>
@@ -660,6 +670,7 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
   );
 
   return (
+    <>
     <WizardChrome language={language} step={step + INTRO_SCREENS} onBack={goBack} footer={nextBtn}>
       {error ? <p className="error-text">{error}</p> : null}
 
@@ -1037,5 +1048,11 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
         </>
       )}
     </WizardChrome>
+    <PhotoGuideSheet
+      language={language}
+      open={photoGuideOpen}
+      onClose={() => setPhotoGuideOpen(false)}
+    />
+    </>
   );
 }

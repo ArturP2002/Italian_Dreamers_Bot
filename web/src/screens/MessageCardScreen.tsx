@@ -155,6 +155,14 @@ export function MessageCardScreen({ language, onCreditsChange }: Props) {
       ? (item.profile_name ?? "—")
       : `${item.profile_name ?? "—"}, ${item.profile_age ?? "—"}`;
 
+  // Outgoing while waiting (or closed without chat) — no one to report yet.
+  // Incoming always; outgoing after the other side replied / chat opened.
+  const canReport =
+    isIncoming ||
+    item.status === "replied" ||
+    item.status === "unlocked" ||
+    item.status === "chatting";
+
   return (
     <section className="screen screen--milky">
       <Link to="/inbox" className="work-back">
@@ -319,6 +327,7 @@ export function MessageCardScreen({ language, onCreditsChange }: Props) {
           </div>
         ) : null}
 
+        {canReport ? (
         <div className="letter-card__actions">
           {!reportOpen ? (
             <button
@@ -352,6 +361,7 @@ export function MessageCardScreen({ language, onCreditsChange }: Props) {
             </>
           )}
         </div>
+        ) : null}
 
         {info ? <p className="home-meta">{info}</p> : null}
         {error ? <p className="form-error">{error}</p> : null}

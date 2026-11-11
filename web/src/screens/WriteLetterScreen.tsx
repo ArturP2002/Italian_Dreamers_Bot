@@ -3,7 +3,6 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { type Language, t, tf } from "../i18n/messages";
 import {
   createLetter,
-  fetchConfig,
   fetchWriteTarget,
   mediaUrl,
   type WriteTarget,
@@ -24,7 +23,6 @@ export function WriteLetterScreen({ language }: Props) {
   const [photoIsMine, setPhotoIsMine] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [botUsername, setBotUsername] = useState<string | null>(null);
 
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
@@ -32,12 +30,6 @@ export function WriteLetterScreen({ language }: Props) {
     if (!Number.isFinite(id)) return;
     void fetchWriteTarget(id).then(setTarget);
   }, [id]);
-
-  useEffect(() => {
-    void fetchConfig().then((cfg) => {
-      setBotUsername(cfg?.bot_username ?? null);
-    });
-  }, []);
 
   useEffect(() => {
     if (!photo) {
@@ -110,13 +102,8 @@ export function WriteLetterScreen({ language }: Props) {
     }
     setBusy(true);
     try {
+      // Native Telegram dialog inside Mini App — do not open t.me (that drops the letter).
       const granted = await ensureWriteAccess();
-      if (!granted) {
-        setError(t(language, "writeAccessDenied"));
-        const tg = window.Telegram?.WebApp;
-        if (tg?.showAlert) tg.showAlert(t(language, "writeAccessDenied"));
-        return;
-      }
       const created = await createLetter({
         profileId: id,
         text: text.trim(),
@@ -125,6 +112,10 @@ export function WriteLetterScreen({ language }: Props) {
         photo,
         photoIsMine: photoIsMine || !photo,
       });
+      if (!granted) {
+        const tg = window.Telegram?.WebApp;
+        if (tg?.showAlert) tg.showAlert(t(language, "writeAccessDenied"));
+      }
       navigate(`/inbox/${created.id}`, { replace: true });
     } catch (e) {
       const raw = e instanceof Error ? e.message : "";
@@ -147,6 +138,7 @@ export function WriteLetterScreen({ language }: Props) {
         else if (raw.includes("photo_required")) code = "photo_required";
         else if (raw.includes("photo_not_confirmed")) code = "photo_not_confirmed";
         else if (raw.includes("no_person")) code = "no_person";
+        else if (raw.includes("group_photo")) code = "group_photo";
         else if (raw.includes("no_credits") || raw.includes("402")) code = "no_credits";
       }
 
@@ -160,6 +152,7 @@ export function WriteLetterScreen({ language }: Props) {
         photo_required: t(language, "writePhotoRequired"),
         photo_not_confirmed: t(language, "writePhotoMine"),
         no_person: t(language, "writeNoPerson"),
+        group_photo: t(language, "photoGroupRejected"),
         no_credits: t(language, "writeNeedCredit"),
       };
       const message = textByCode[code] ?? t(language, "errorGeneric");
@@ -191,24 +184,7 @@ export function WriteLetterScreen({ language }: Props) {
       <h1 className="work-title">{t(language, "writeTitle")}</h1>
       <p className="work-body">{tf(language, "letterTo", { name: target.name })}</p>
       <p className="home-meta">{t(language, "writeHint")}</p>
-      <div className="write-push-hint">
-        <p>{t(language, "writeAccessNote")}</p>
-        <p>{t(language, "writePushHint")}</p>
-        {botUsername ? (
-          <button
-            type="button"
-            className="btn btn--block btn--ghost"
-            onClick={() => {
-              const url = `https://t.me/${botUsername}?start=notify`;
-              const tg = window.Telegram?.WebApp;
-              if (tg?.openTelegramLink) tg.openTelegramLink(url);
-              else window.open(url, "_blank", "noopener");
-            }}
-          >
-            {t(language, "writeOpenBot")}
-          </button>
-        ) : null}
-      </div>
+      <p className="home-meta">{t(language, "writePushHintShort")}</p>
 
       <div className="write-target">
         {target.photo_url ? (

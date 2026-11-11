@@ -32,7 +32,7 @@ from app.services.entitlements import has_unlimited
 from app.services.payments import create_credit_payment, send_credit_invoice
 from app.services.profiles import get_user_profile
 from app.services.referrals import claim_referral, count_invited, ensure_referral_code, referral_link
-from app.services.vision import photo_has_person
+from app.services.vision import assess_profile_photo
 
 router = APIRouter(tags=["messages"])
 
@@ -210,6 +210,7 @@ def _raise_service(exc: MessageServiceError) -> None:
         "photo_required": status.HTTP_400_BAD_REQUEST,
         "photo_not_confirmed": status.HTTP_400_BAD_REQUEST,
         "no_person": status.HTTP_400_BAD_REQUEST,
+        "group_photo": status.HTTP_400_BAD_REQUEST,
         "contact_forbidden": status.HTTP_400_BAD_REQUEST,
         "text_short": status.HTTP_400_BAD_REQUEST,
         "text_long": status.HTTP_400_BAD_REQUEST,
@@ -387,16 +388,21 @@ async def create_letter(
                 status_code=400,
                 detail={"code": "photo_not_confirmed", "message": "Confirm the photo is yours"},
             )
-        has_person = await photo_has_person(
+        check = await assess_profile_photo(
             raw,
             mime=content_type if content_type.startswith("image/") else "image/jpeg",
             api_key=settings.translation_api_key,
             model=settings.openai_vision_model,
         )
-        if not has_person:
+        if check == "no_person":
             raise HTTPException(
                 status_code=400,
                 detail={"code": "no_person", "message": "Photo must show a person"},
+            )
+        if check == "group":
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "group_photo", "message": "Photo must show only one person"},
             )
         ext = "jpg"
         if "png" in content_type:

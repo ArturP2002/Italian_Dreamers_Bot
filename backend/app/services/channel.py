@@ -300,7 +300,8 @@ async def publish_profile_to_channel(
         photo_items: list[tuple[str, str | Path]] = [
             ("photo", _photo_source(p.file_id)) for p in photos
         ]
-        items = ([("video", greeting_video)] if greeting_video else []) + photo_items
+        # Photos first, greeting video always last — cleaner album swipe in the channel.
+        items = photo_items + ([("video", greeting_video)] if greeting_video else [])
         if len(items) == 1:
             source = items[0][1]
             if isinstance(source, Path):

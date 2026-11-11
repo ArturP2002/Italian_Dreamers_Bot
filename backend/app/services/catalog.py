@@ -192,6 +192,39 @@ async def get_catalog_profile(session: AsyncSession, profile_id: int) -> Profile
     return result.scalar_one_or_none()
 
 
+def localized_catalog_fields(profile: Profile, viewer_lang: str) -> dict[str, str]:
+    """Return catalog text in the viewer's language when a cached translation exists.
+
+    Profiles are authored in the owner's language and translated for the opposite
+    audience (male → RU, female → IT). The Mini App must show that translation
+    to the matching viewer — channel captions already do; catalog previously did not.
+    """
+    from app.services.channel import source_language_for_profile
+
+    lang = viewer_lang if viewer_lang in {"ru", "it"} else "ru"
+    source = source_language_for_profile(profile)
+    use_tr = (
+        lang != source
+        and profile.translated_language == lang
+        and bool(profile.about_translated or profile.desired_partner_translated)
+    )
+
+    def pick(original: str | None, translated: str | None) -> str:
+        if use_tr and translated:
+            return translated
+        return original or ""
+
+    return {
+        "name": pick(profile.name, profile.name_translated),
+        "city": pick(profile.city, profile.city_translated),
+        "country": pick(profile.country, profile.country_translated),
+        "profession": pick(profile.profession, profile.profession_translated),
+        "about": pick(profile.about, profile.about_translated),
+        "desired_partner": pick(profile.desired_partner, profile.desired_partner_translated),
+        "hobbies": profile.hobbies or "",
+    }
+
+
 def card_photos(profile: Profile, *, limit: int = 4) -> list[str]:
     photos = sorted(profile.photos or [], key=lambda p: p.position)
     urls: list[str] = []
