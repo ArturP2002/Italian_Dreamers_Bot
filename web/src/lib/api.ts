@@ -22,6 +22,7 @@ export type MeUser = {
   verification_status?: string | null;
   is_top?: boolean;
   top_until?: string | null;
+  travel_interest?: boolean;
 };
 
 export type ProfilePhoto = {
@@ -163,6 +164,8 @@ export type AdminStats = {
   letters_new?: number;
   letters_replied_period?: number;
   letters_unlocked_period?: number;
+  travel_interest_total?: number;
+  travel_interest_period?: number;
 };
 
 export type CatalogCard = {
@@ -309,6 +312,7 @@ export type PublicConfig = {
   timezone: string;
   bot_username?: string | null;
   channel_url?: string | null;
+  channel_members?: number;
 };
 
 export type CoverQuestion = { id: number; ru: string; it: string };
@@ -912,6 +916,10 @@ export async function sendChatMessage(id: number, text: string): Promise<ChatMes
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text }),
   });
+}
+
+export async function registerTravelInterest(): Promise<{ ok: boolean; already?: boolean }> {
+  return apiFetchJsonOrThrow("/api/me/travel-interest", { method: "POST" });
 }
 
 export async function fetchReferral(): Promise<ReferralInfo | null> {

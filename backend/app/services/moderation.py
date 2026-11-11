@@ -25,6 +25,7 @@ from app.models import (
     Profile,
     ProfilePhoto,
     ProfileStatus,
+    TravelInterest,
     User,
 )
 from app.services.payments import create_publish_payment, send_publish_invoice
@@ -576,6 +577,12 @@ async def admin_stats(session: AsyncSession, *, period: str | None = None, tz_na
     letters_unlocked_period = await _count(
         select(func.count()).select_from(MessageRequest).where(_window(MessageRequest.unlocked_at))
     )
+    travel_interest_total = int(
+        (await session.execute(select(func.count()).select_from(TravelInterest))).scalar_one()
+    )
+    travel_interest_period = await _count(
+        select(func.count()).select_from(TravelInterest).where(_window(TravelInterest.created_at))
+    )
     stars_period = (
         await session.execute(
             select(func.coalesce(func.sum(Payment.stars_amount), 0)).where(
@@ -618,4 +625,6 @@ async def admin_stats(session: AsyncSession, *, period: str | None = None, tz_na
         "letters_new": letters_new,
         "letters_replied_period": letters_replied_period,
         "letters_unlocked_period": letters_unlocked_period,
+        "travel_interest_total": travel_interest_total,
+        "travel_interest_period": travel_interest_period,
     }

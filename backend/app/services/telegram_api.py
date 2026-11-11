@@ -242,6 +242,21 @@ async def get_chat(settings: Settings, chat_id: int) -> dict[str, Any]:
     return await telegram_call(settings, "getChat", json={"chat_id": chat_id})
 
 
+async def get_chat_member_count(settings: Settings, chat_id: int) -> int | None:
+    """Return channel/supergroup member count, or None on failure."""
+    if not chat_id:
+        return None
+    try:
+        payload = await telegram_call(
+            settings, "getChatMemberCount", json={"chat_id": chat_id}
+        )
+        count = payload.get("result")
+        return int(count) if count is not None else None
+    except Exception:
+        logger.exception("getChatMemberCount failed for %s", chat_id)
+        return None
+
+
 async def get_bot_info(settings: Settings) -> dict:
     try:
         payload = await telegram_call(settings, "getMe", json={})

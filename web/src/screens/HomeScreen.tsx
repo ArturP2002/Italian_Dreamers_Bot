@@ -8,10 +8,19 @@ import {
   fetchConfig,
   fetchInbox,
   fetchLikes,
+  registerTravelInterest,
   requestPublishInvoice,
   type MeUser,
   type PublicConfig,
 } from "../lib/api";
+
+function formatMembers(n: number, language: Language): string {
+  try {
+    return n.toLocaleString(language === "it" ? "it-IT" : "ru-RU");
+  } catch {
+    return String(n);
+  }
+}
 
 type Props = {
   language: Language;
@@ -74,7 +83,11 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
   const [pendingLetters, setPendingLetters] = useState(0);
   const [likesReceived, setLikesReceived] = useState(0);
   const [channelUrl, setChannelUrl] = useState("https://t.me/italiandreamers");
+  const [channelMembers, setChannelMembers] = useState(20000);
   const [config, setConfig] = useState<PublicConfig | null>(null);
+  const [travelOpen, setTravelOpen] = useState(false);
+  const [travelBusy, setTravelBusy] = useState(false);
+  const [travelDone, setTravelDone] = useState(Boolean(me?.travel_interest));
 
   useEffect(() => {
     void fetchInbox().then((data) => {
@@ -90,8 +103,27 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
       setConfig(cfg);
       const url = cfg?.channel_url?.trim();
       if (url) setChannelUrl(url);
+      if (cfg?.channel_members && cfg.channel_members > 0) {
+        setChannelMembers(cfg.channel_members);
+      }
     });
   }, []);
+
+  useEffect(() => {
+    setTravelDone(Boolean(me?.travel_interest));
+  }, [me?.travel_interest]);
+
+  const onTravelNotify = async () => {
+    setTravelBusy(true);
+    try {
+      await registerTravelInterest();
+      setTravelDone(true);
+    } catch {
+      /* keep sheet open */
+    } finally {
+      setTravelBusy(false);
+    }
+  };
 
   const onPay = async () => {
     setPayBusy(true);
@@ -151,9 +183,6 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
       </header>
 
       <h1 className="home-greeting">{greeting}</h1>
-      <a className="home-channel-link" href={channelUrl} target="_blank" rel="noreferrer">
-        {t(language, "homeOpenChannelArrow")}
-      </a>
 
       <article className="home-funnel">
         <p className="home-funnel__eyebrow">{t(language, "homeYourProfile")}</p>
@@ -280,17 +309,68 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
         </Link>
       ) : null}
 
+      <div className="home-duo">
+        <a className="home-channel-card" href={channelUrl} target="_blank" rel="noreferrer">
+          <span className="home-channel-card__tg" aria-hidden>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+              <path d="M9.8 15.5 9.6 19c.3 0 .5-.1.7-.3l1.7-1.6 3.5 2.6c.6.3 1.1.2 1.3-.6l2.3-10.9c.2-.9-.3-1.3-.9-1.1L4.2 11.2c-.9.3-.9.8-.2 1l3.5 1.1 8.1-5.1c.4-.2.7 0 .4.3l-6.2 7z" />
+            </svg>
+          </span>
+          <span className="home-channel-card__count">{formatMembers(channelMembers, language)}</span>
+          <span className="home-channel-card__heart" aria-hidden>
+            <TricolorHeart className="home-channel-card__heart-icon" />
+          </span>
+          <h3 className="home-channel-card__title">{t(language, "homeChannelTitle")}</h3>
+          <p className="home-channel-card__hint">{t(language, "homeChannelHint")}</p>
+        </a>
+
+        <button type="button" className="home-travel-card" onClick={() => setTravelOpen(true)}>
+          <img className="home-travel-card__bg" src={homeAssets.travel} alt="" />
+          <span className="home-travel-card__veil" />
+          <span className="home-travel-card__badge">{t(language, "homeTravelSoon")}</span>
+          <span className="home-travel-card__body">
+            <strong>{t(language, "homeTravelTitle")}</strong>
+            <span>{t(language, "homeTravelHint")}</span>
+          </span>
+        </button>
+      </div>
+
       <Link to="/referral" className="home-referral">
         <img className="home-referral__bg" src={homeAssets.referral} alt="" />
         <div className="home-referral__veil" />
         <div className="home-referral__body">
-          <div>
+          <div className="home-referral__copy">
             <h3 className="home-referral__title">{t(language, "homeReferral")}</h3>
             <p className="home-referral__hint">{t(language, "homeReferralHint")}</p>
           </div>
           <span className="home-referral__cta">{t(language, "homeReferralCta")}</span>
         </div>
       </Link>
+
+      {travelOpen ? (
+        <div className="balance-sheet" role="dialog" aria-modal="true" onClick={() => setTravelOpen(false)}>
+          <div className="balance-sheet__panel" onClick={(e) => e.stopPropagation()}>
+            <p className="balance-sheet__eyebrow">{t(language, "homeTravelTitle")}</p>
+            <h2 className="balance-sheet__title">
+              {travelDone ? t(language, "homeTravelModalThanks") : t(language, "homeTravelModalTitle")}
+            </h2>
+            {!travelDone ? (
+              <button
+                type="button"
+                className="btn btn--block btn--dark"
+                disabled={travelBusy}
+                onClick={() => void onTravelNotify()}
+              >
+                {t(language, "homeTravelModalCta")}
+              </button>
+            ) : (
+              <button type="button" className="btn btn--block btn--dark" onClick={() => setTravelOpen(false)}>
+                OK
+              </button>
+            )}
+          </div>
+        </div>
+      ) : null}
 
       <Link to="/ads" className="home-row-link">
         <span className="home-row-link__icon home-row-link__icon--mail" aria-hidden>

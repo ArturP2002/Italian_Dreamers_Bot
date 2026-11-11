@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import AuthContext, get_auth_context
 from app.config import Settings, get_settings
 from app.database import get_session
-from app.models import LanguageCode, Profile, ProfileStatus
+from app.models import LanguageCode, Profile, ProfileStatus, TravelInterest
 from app.services.entitlements import active_subscription, has_unlimited, is_top_now
 from app.services.legacy import LegacyServiceError, claim_legacy
 from app.services.payments import (
@@ -54,6 +54,7 @@ class MeResponse(BaseModel):
     verification_status: str | None = None
     is_top: bool = False
     top_until: datetime | None = None
+    travel_interest: bool = False
 
 
 class LanguageUpdate(BaseModel):
@@ -79,6 +80,9 @@ async def _build_me(auth: AuthContext, session: AsyncSession) -> MeResponse:
     result = await session.execute(select(Profile).where(Profile.user_id == auth.user.id))
     profile = result.scalar_one_or_none()
     sub = await active_subscription(session, auth.user.id)
+    travel = await session.execute(
+        select(TravelInterest.id).where(TravelInterest.user_id == auth.user.id)
+    )
     return MeResponse(
         id=auth.user.id,
         telegram_id=auth.user.telegram_id,
@@ -101,6 +105,7 @@ async def _build_me(auth: AuthContext, session: AsyncSession) -> MeResponse:
         verification_status=profile.verification_status if profile else None,
         is_top=is_top_now(profile) if profile else False,
         top_until=profile.top_until if profile else None,
+        travel_interest=travel.scalar_one_or_none() is not None,
     )
 
 
@@ -278,6 +283,22 @@ async def upload_verification_selfie(
         dest.unlink(missing_ok=True)
         raise HTTPException(status_code=409, detail=exc.code) from exc
     return {"ok": True, "verification_status": profile.verification_status}
+
+
+@router.post("/travel-interest")
+async def register_travel_interest(
+    auth: AuthContext = Depends(get_auth_context),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    existing = await session.execute(
+        select(TravelInterest).where(TravelInterest.user_id == auth.user.id)
+    )
+    row = existing.scalar_one_or_none()
+    if row is None:
+        session.add(TravelInterest(user_id=auth.user.id))
+        await session.commit()
+        return {"ok": True, "already": False}
+    return {"ok": True, "already": True}
 
 
 @router.post("/legacy/{token}")

@@ -1614,6 +1614,14 @@ export function AdminScreen({ language }: Props) {
             <strong>{stats.users_soft_banned ?? 0}</strong>
             <span>временно ограничены</span>
           </div>
+          <div>
+            <strong>{stats.travel_interest_period ?? 0}</strong>
+            <span>интерес к путешествиям (период)</span>
+          </div>
+          <div>
+            <strong>{stats.travel_interest_total ?? 0}</strong>
+            <span>интерес к путешествиям (всего)</span>
+          </div>
         </div>
       ) : null}
 

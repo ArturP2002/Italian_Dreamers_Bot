@@ -1,15 +1,35 @@
+import time
+
 from fastapi import APIRouter, Depends
 
 from app.config import Settings, get_settings
-from app.services.telegram_api import get_bot_username
+from app.services.telegram_api import get_bot_username, get_chat_member_count
 
 router = APIRouter(tags=["config"])
+
+_members_cache: dict[str, float | int | None] = {"count": None, "fetched_at": 0.0}
+_MEMBERS_TTL_SEC = 600.0
+
+
+async def _channel_member_count(settings: Settings) -> int:
+    now = time.monotonic()
+    cached = _members_cache.get("count")
+    fetched_at = float(_members_cache.get("fetched_at") or 0)
+    if cached is not None and now - fetched_at < _MEMBERS_TTL_SEC:
+        return int(cached)
+
+    live = await get_chat_member_count(settings, settings.channel_id)
+    count = int(live) if live and live > 0 else settings.channel_members_fallback
+    _members_cache["count"] = count
+    _members_cache["fetched_at"] = now
+    return count
 
 
 @router.get("/config")
 async def public_config(settings: Settings = Depends(get_settings)) -> dict:
     """Public price/limit placeholders for Mini App UI (no secrets)."""
     bot_username = await get_bot_username(settings)
+    channel_members = await _channel_member_count(settings)
     return {
         "prices": {
             "message_credit_stars": settings.price_message_credit_stars,
@@ -34,4 +54,5 @@ async def public_config(settings: Settings = Depends(get_settings)) -> dict:
         "timezone": settings.app_timezone,
         "bot_username": bot_username,
         "channel_url": settings.channel_url,
+        "channel_members": channel_members,
     }

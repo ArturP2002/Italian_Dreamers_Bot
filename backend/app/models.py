@@ -637,6 +637,20 @@ class LegacyAnketa(Base):
     )
 
 
+class TravelInterest(Base):
+    """Users who tapped «notify me» on the coming Travel section."""
+
+    __tablename__ = "travel_interests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class WeeklyReport(Base):
     __tablename__ = "weekly_reports"
 

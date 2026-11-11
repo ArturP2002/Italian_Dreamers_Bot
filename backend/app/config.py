@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     )
     channel_id: int = Field(alias="CHANNEL_ID", default=0)
     channel_url: str = Field(alias="CHANNEL_URL", default="https://t.me/italiandreamers")
+    # Fallback shown on home if Telegram getChatMemberCount fails.
+    channel_members_fallback: int = Field(alias="CHANNEL_MEMBERS_FALLBACK", default=20000)
     discussion_chat_id: int = Field(alias="DISCUSSION_CHAT_ID", default=0)
     webapp_url: str = Field(alias="WEBAPP_URL", default="http://localhost:5173")
     cors_origins: str = Field(alias="CORS_ORIGINS", default="http://localhost:5173")

@@ -28,6 +28,7 @@ export const homeAssets = {
   profile: "/photos/home_v2_profile_positano.jpg",
   credits: "/photos/home_v2_credits_snow.jpg",
   referral: "/photos/home_v2_referral_winter_kiss.jpg",
+  travel: "/photos/home_v2_travel_arches.jpg",
   // legacy aliases used by older screens
   matches: "/photos/home_v2_catalog_spb_bridge.jpg",
   letters: "/photos/home_v2_messages_rooftop.jpg",
