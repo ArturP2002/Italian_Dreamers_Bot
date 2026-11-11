@@ -24,8 +24,9 @@
     180deg,
     rgba(26, 21, 17, 0.12) 0%,
     rgba(26, 21, 17, 0.05) 38%,
-    rgba(26, 21, 17, 0.55) 68%,
-    rgba(26, 21, 17, 0.88) 100%
+    rgba(26, 21, 17, 0.45) 62%,
+    rgba(26, 21, 17, 0.78) 78%,
+    rgba(26, 21, 17, 0.92) 100%
   );
   pointer-events: none;
 }
@@ -33,24 +34,25 @@
 .loading-screen__brand {
   position: absolute;
   left: 0;
-  right: 0;
+  right: auto;
   bottom: calc(96px + var(--safe-bottom));
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
+  align-items: flex-start;
+  text-align: left;
   padding: 0 20px;
+  max-width: min(86%, 360px);
   pointer-events: none;
   animation: loading-rise 700ms 180ms ease both;
 }
 
 .loading-screen__logo {
   margin: 0;
-  width: 62%;
-  max-width: 320px;
+  width: auto;
+  max-width: 100%;
   font-family: var(--font-display);
   font-weight: 900;
-  font-size: clamp(42px, 16vw, 72px);
+  font-size: clamp(40px, 14vw, 64px);
   letter-spacing: -0.01em;
   text-transform: uppercase;
   line-height: 0.92;
