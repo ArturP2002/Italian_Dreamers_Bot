@@ -142,7 +142,7 @@ export function VerifyScreen({ language, onRefresh }: Props) {
   }, [ritualPhase]);
 
   const startLivePreview = async () => {
-    if (camState === "starting" || camState === "live" || ritualPhase !== "idle") return;
+    if (camState === "starting" || camState === "live") return;
     setError(null);
     setCamState("starting");
     try {
@@ -244,6 +244,17 @@ export function VerifyScreen({ language, onRefresh }: Props) {
     navigate("/");
   };
 
+  const onRetry = () => {
+    clearFreeze();
+    setRitualPhase("idle");
+    setRitualExpanded(false);
+    setError(null);
+    setVerdictTitle("");
+    setVerdictBody("");
+    if (status === "rejected") setStatus("none");
+    void startLivePreview();
+  };
+
   const canCapture = status !== "verified" && status !== "pending" && ritualPhase === "idle";
   const isLive = camState === "live";
   const isStarting = camState === "starting";
@@ -342,9 +353,20 @@ export function VerifyScreen({ language, onRefresh }: Props) {
               ) : null}
             </div>
             {ritualPhase === "result" ? (
-              <button type="button" className="btn btn--block btn--dark verify-ritual__done" onClick={onDone}>
-                {t(language, "verifyDone")}
-              </button>
+              <div className="verify-ritual__actions">
+                {verdict === "fail" ? (
+                  <button type="button" className="btn btn--block btn--dark" onClick={onRetry}>
+                    {t(language, "verifyRetry")}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className={`btn btn--block${verdict === "fail" ? " btn--ghost" : " btn--dark"} verify-ritual__done`}
+                  onClick={onDone}
+                >
+                  {t(language, "verifyDone")}
+                </button>
+              </div>
             ) : null}
           </div>
         </div>

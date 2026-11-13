@@ -1545,9 +1545,22 @@
   color: #f0c9c9;
 }
 
+.verify-ritual__actions {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: verify-verdict-in 0.45s ease 0.08s both;
+}
+
 .verify-ritual__done {
   width: 100%;
-  animation: verify-verdict-in 0.45s ease 0.08s both;
+}
+
+.verify-ritual .btn--ghost {
+  background: transparent;
+  color: #f5f0e8;
+  border: 1px solid rgba(245, 240, 232, 0.45);
 }
 
 @keyframes verify-phrase-in {
