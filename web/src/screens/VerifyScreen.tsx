@@ -13,7 +13,6 @@ async function requestCameraStream(): Promise<MediaStream> {
   if (!media?.getUserMedia) {
     throw new Error("getUserMedia unsupported");
   }
-  // Try front camera first, then any camera — Telegram iOS is picky about constraints.
   const attempts: MediaStreamConstraints[] = [
     { audio: false, video: { facingMode: { ideal: "user" }, width: { ideal: 720 }, height: { ideal: 720 } } },
     { audio: false, video: { facingMode: "user" } },
@@ -30,7 +29,6 @@ async function requestCameraStream(): Promise<MediaStream> {
   throw lastError instanceof Error ? lastError : new Error("camera_denied");
 }
 
-/** Crop mirrored frame to the circle guide (center square of the video). */
 function captureCircleJpeg(video: HTMLVideoElement): Promise<Blob | null> {
   const vw = video.videoWidth || 720;
   const vh = video.videoHeight || 720;
@@ -42,7 +40,6 @@ function captureCircleJpeg(video: HTMLVideoElement): Promise<Blob | null> {
   canvas.height = side;
   const ctx = canvas.getContext("2d");
   if (!ctx) return Promise.resolve(null);
-  // Mirror horizontally to match preview.
   ctx.translate(side, 0);
   ctx.scale(-1, 1);
   ctx.drawImage(video, sx, sy, side, side, 0, 0, side, side);
@@ -57,15 +54,12 @@ export function VerifyScreen({ language, onRefresh }: Props) {
   const [camState, setCamState] = useState<CamState>("idle");
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const galleryInputRef = useRef<HTMLInputElement | null>(null);
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     const video = videoRef.current;
-    if (video) {
-      video.srcObject = null;
-    }
+    if (video) video.srcObject = null;
     setCamState("idle");
   }, []);
 
@@ -98,11 +92,6 @@ export function VerifyScreen({ language, onRefresh }: Props) {
     }
   };
 
-  const onFile = async (file: File | undefined) => {
-    if (!file) return;
-    await uploadBlob(file, file.name || "selfie.jpg");
-  };
-
   const startLivePreview = async () => {
     if (busy || camState === "starting" || camState === "live") return;
     setError(null);
@@ -112,7 +101,7 @@ export function VerifyScreen({ language, onRefresh }: Props) {
       streamRef.current = stream;
       const video = videoRef.current;
       if (!video) {
-        stream.getTracks().forEach((t) => t.stop());
+        stream.getTracks().forEach((track) => track.stop());
         streamRef.current = null;
         setCamState("denied");
         return;
@@ -140,22 +129,42 @@ export function VerifyScreen({ language, onRefresh }: Props) {
 
   const canCapture = status !== "verified" && status !== "pending";
   const isLive = camState === "live";
+  const isStarting = camState === "starting";
 
   return (
-    <section className="screen screen--milky">
+    <section className="screen screen--milky verify-screen">
       <Link to="/" className="work-back" onClick={() => stopCamera()}>
         ← {t(language, "backHome")}
       </Link>
       <h1 className="work-title">{t(language, "verifyTitle")}</h1>
-      <p className="work-body">{t(language, "verifyHint")}</p>
+      <p className="work-body verify-screen__lead">{t(language, "verifyHint")}</p>
+
       {status === "verified" ? <p className="home-meta">{t(language, "verifyOk")}</p> : null}
       {status === "pending" ? <p className="home-meta">{t(language, "verifyPending")}</p> : null}
       {status === "rejected" ? <p className="form-error">{t(language, "verifyRejected")}</p> : null}
 
       {canCapture ? (
         <>
+          {!isLive ? (
+            <ol className="verify-steps">
+              <li>{t(language, "verifyStep1")}</li>
+              <li>{t(language, "verifyStep2")}</li>
+              <li>{t(language, "verifyStep3")}</li>
+            </ol>
+          ) : (
+            <p className="verify-live-hint">{t(language, "verifyOvalHint")}</p>
+          )}
+
           <div className="verify-camera">
-            <div className={`verify-camera__frame${isLive ? " verify-camera__frame--live" : ""}`}>
+            <div
+              className={[
+                "verify-camera__frame",
+                isLive ? "verify-camera__frame--live" : "",
+                isStarting ? "verify-camera__frame--starting" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+            >
               <video
                 ref={videoRef}
                 className="verify-camera__video"
@@ -163,16 +172,9 @@ export function VerifyScreen({ language, onRefresh }: Props) {
                 muted
                 autoPlay
               />
-              <div className="verify-camera__circle" aria-hidden />
-              {!isLive ? (
-                <p className="verify-camera__hint">
-                  {camState === "starting"
-                    ? t(language, "verifyCameraStarting")
-                    : t(language, "verifyCircleHint")}
-                </p>
-              ) : null}
+              <div className="verify-camera__ring" aria-hidden />
+              {isStarting ? <span className="verify-camera__pulse" aria-hidden /> : null}
             </div>
-            <p className="verify-camera__caption">{t(language, "verifyOvalHint")}</p>
           </div>
 
           {isLive ? (
@@ -188,34 +190,12 @@ export function VerifyScreen({ language, onRefresh }: Props) {
             <button
               type="button"
               className="btn btn--block btn--dark"
-              disabled={busy || camState === "starting"}
+              disabled={busy || isStarting}
               onClick={() => void startLivePreview()}
             >
-              {camState === "starting" ? t(language, "verifyCameraStarting") : t(language, "verifyOpenCamera")}
+              {isStarting ? t(language, "verifyCameraStarting") : t(language, "verifyOpenCamera")}
             </button>
           )}
-
-          <button
-            type="button"
-            className="btn btn--block btn--ghost verify-fallback"
-            disabled={busy}
-            onClick={() => galleryInputRef.current?.click()}
-          >
-            {t(language, "verifyUpload")}
-          </button>
-
-          <input
-            ref={galleryInputRef}
-            type="file"
-            accept="image/*"
-            hidden
-            disabled={busy}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              e.target.value = "";
-              void onFile(file);
-            }}
-          />
         </>
       ) : null}
 
