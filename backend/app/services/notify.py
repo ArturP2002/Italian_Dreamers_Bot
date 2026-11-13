@@ -351,11 +351,13 @@ async def notify_initiator_pay_to_unlock(
         text = f"💌 <b>{safe_name}</b> {_replied_verb(lang, gender)}!"
         if quote_html:
             text += f"\n«{quote_html}»"
+        text += "\nApri la chat con un regalo o <b>Dreamers Plus</b>."
         btn = "Apri la risposta"
     else:
         text = f"💌 <b>{safe_name}</b> {_replied_verb(lang, gender)} тебе!"
         if quote_html:
             text += f"\n«{quote_html}»"
+        text += "\nОткрой переписку подарком или <b>Dreamers Plus</b>."
         btn = "Открыть ответ"
     markup = _webapp_button(app_url, btn)
     photo_source = None

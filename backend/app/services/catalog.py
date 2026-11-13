@@ -16,10 +16,12 @@ from app.models import (
     MessageRequestStatus,
     Profile,
     ProfileStatus,
+    Subscription,
+    SubscriptionStatus,
     User,
     VerificationStatus,
 )
-from app.services.entitlements import CATALOG_NEW_TTL, is_new_in_catalog, is_top_now
+from app.services.entitlements import CATALOG_NEW_TTL, is_new_in_catalog, is_top_now, utcnow
 
 CATALOG_STATUSES = (ProfileStatus.QUEUED.value, ProfileStatus.PUBLISHED.value)
 ACTIVE_LETTER_STATUSES = (
@@ -188,6 +190,21 @@ def _interleave(tops: list[Profile], news: list[Profile]) -> list[Profile]:
     return out
 
 
+def _active_plus_user_ids_subq():
+    """Users with Dreamers Plus still valid (active or canceled-until-expiry)."""
+    now = utcnow()
+    return (
+        select(Subscription.user_id)
+        .where(
+            Subscription.expires_at > now,
+            Subscription.status.in_(
+                [SubscriptionStatus.ACTIVE.value, SubscriptionStatus.CANCELED.value]
+            ),
+        )
+        .distinct()
+    )
+
+
 def _base_filters(
     *,
     viewer: User,
@@ -199,6 +216,8 @@ def _base_filters(
     conds = [
         Profile.status.in_(list(CATALOG_STATUSES)),
         Profile.user_id != viewer.id,
+        # Without Plus the profile is hidden from Participants.
+        Profile.user_id.in_(_active_plus_user_ids_subq()),
     ]
     if gender in {"male", "female"}:
         conds.append(Profile.gender == gender)

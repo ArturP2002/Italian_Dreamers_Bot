@@ -58,6 +58,9 @@ class MeResponse(BaseModel):
     is_registered: bool = False
     gift_credits_left: int = 0
     first_message_free_used: bool = False
+    anketa_percent: int = 0
+    subscription_canceled: bool = False
+    unread_locked_count: int = 0
 
 
 class LanguageUpdate(BaseModel):
@@ -89,7 +92,10 @@ async def _touch_last_seen(session: AsyncSession, auth: AuthContext) -> None:
 
 
 async def _build_me(auth: AuthContext, session: AsyncSession) -> MeResponse:
+    from app.models import MessageRequest, MessageRequestStatus
+    from app.services.profiles import profile_completion_percent
     from app.services.registration import profile_is_registered
+    from sqlalchemy import func
 
     now = datetime.now(timezone.utc)
     soft_ban = auth.user.soft_ban_until
@@ -100,6 +106,23 @@ async def _build_me(auth: AuthContext, session: AsyncSession) -> MeResponse:
     travel = await session.execute(
         select(TravelInterest.id).where(TravelInterest.user_id == auth.user.id)
     )
+    unread_locked = 0
+    if profile is not None and sub is None:
+        # Incoming pending/replied letters the user can't open without Plus.
+        locked = await session.execute(
+            select(func.count())
+            .select_from(MessageRequest)
+            .where(
+                MessageRequest.profile_id == profile.id,
+                MessageRequest.status.in_(
+                    [
+                        MessageRequestStatus.PENDING.value,
+                        MessageRequestStatus.REPLIED.value,
+                    ]
+                ),
+            )
+        )
+        unread_locked = int(locked.scalar_one())
     return MeResponse(
         id=auth.user.id,
         telegram_id=auth.user.telegram_id,
@@ -123,9 +146,12 @@ async def _build_me(auth: AuthContext, session: AsyncSession) -> MeResponse:
         is_top=is_top_now(profile) if profile else False,
         top_until=profile.top_until if profile else None,
         travel_interest=travel.scalar_one_or_none() is not None,
-        is_registered=profile_is_registered(profile),
+        is_registered=profile_is_registered(profile) and sub is not None,
         gift_credits_left=int(auth.user.gift_credits_left or 0),
         first_message_free_used=bool(auth.user.first_message_free_used),
+        anketa_percent=profile_completion_percent(profile),
+        subscription_canceled=bool(sub and sub.canceled_at is not None),
+        unread_locked_count=unread_locked,
     )
 
 

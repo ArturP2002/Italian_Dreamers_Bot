@@ -1,4 +1,4 @@
-"""Referral codes: shareable bot links, one-time claim, referrer notification."""
+"""Referral codes: shareable bot links, one-time claim; top days on friend's Plus."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
-from app.models import CreditLedgerEntry, LedgerEntryType, User
+from app.models import User
 from app.services.entitlements import apply_top_until, utcnow
 from app.services.notify import notify_referrer_joined
 from app.services.profiles import get_user_profile
@@ -32,7 +32,6 @@ async def referral_link(settings: Settings, code: str) -> str:
     if username and info.get("has_main_web_app"):
         return f"https://t.me/{username}?startapp=ref_{code}"
     if username:
-        # Without a Main Mini App, ?startapp only opens the chat; ?start reaches /start.
         return f"https://t.me/{username}?start=ref_{code}"
     return f"{settings.webapp_url.rstrip('/')}/?startapp=ref_{code}"
 
@@ -44,9 +43,22 @@ async def count_invited(session: AsyncSession, user: User) -> int:
     return int(result.scalar_one())
 
 
-def referral_top_days_for_invites(settings: Settings, invited_count: int) -> int:
+async def count_plus_invited(session: AsyncSession, user: User) -> int:
+    """Friends who joined via link AND already bought Plus (rewarded)."""
+    result = await session.execute(
+        select(func.count())
+        .select_from(User)
+        .where(
+            User.referred_by_user_id == user.id,
+            User.referral_plus_rewarded.is_(True),
+        )
+    )
+    return int(result.scalar_one())
+
+
+def referral_top_days_for_invites(settings: Settings, plus_invited_count: int) -> int:
     days = max(0, settings.referral_bonus_top_days)
-    return max(0, invited_count) * days
+    return max(0, plus_invited_count) * days
 
 
 async def claim_referral(
@@ -56,7 +68,7 @@ async def claim_referral(
     user: User,
     code: str,
 ) -> bool:
-    """Attach `user` to the owner of `code` once; returns True when newly attached."""
+    """Attach `user` to the owner of `code` once. Top days are granted on Plus, not here."""
     cleaned = (code or "").strip()
     if not cleaned or user.referred_by_user_id:
         return False
@@ -66,27 +78,6 @@ async def claim_referral(
         return False
     user.referred_by_user_id = referrer.id
     session.add(user)
-    bonus = max(0, settings.referral_bonus_credits)
-    if bonus:
-        referrer.message_credits += bonus
-        session.add(referrer)
-        session.add(
-            CreditLedgerEntry(
-                user_id=referrer.id,
-                entry_type=LedgerEntryType.REFERRAL.value,
-                delta=bonus,
-                balance_after=referrer.message_credits,
-                note=f"referral:{user.id}",
-            )
-        )
-    top_days = max(0, settings.referral_bonus_top_days)
-    if top_days:
-        profile = await get_user_profile(session, referrer.id)
-        if profile is not None:
-            now = utcnow()
-            base = profile.top_until if profile.top_until and profile.top_until > now else now
-            apply_top_until(profile, base + timedelta(days=top_days))
-            session.add(profile)
     await session.commit()
     await session.refresh(user)
     await session.refresh(referrer)
@@ -96,9 +87,49 @@ async def claim_referral(
             referrer=referrer,
             invited=user,
             total=await count_invited(session, referrer),
-            bonus=bonus,
-            top_days=top_days,
+            bonus=0,
+            top_days=0,
         )
     except Exception:
         logger.exception("Failed to notify referrer %s", referrer.telegram_id)
+    return True
+
+
+async def reward_referrer_on_plus(
+    session: AsyncSession,
+    settings: Settings,
+    *,
+    payer: User,
+) -> bool:
+    """When a referred friend buys Plus — grant stacked top days to referrer once."""
+    if payer.referral_plus_rewarded or not payer.referred_by_user_id:
+        return False
+    top_days = max(0, settings.referral_bonus_top_days)
+    result = await session.execute(select(User).where(User.id == payer.referred_by_user_id))
+    referrer = result.scalar_one_or_none()
+    if referrer is None:
+        payer.referral_plus_rewarded = True
+        session.add(payer)
+        return False
+    if top_days:
+        profile = await get_user_profile(session, referrer.id)
+        if profile is not None:
+            now = utcnow()
+            base = profile.top_until if profile.top_until and profile.top_until > now else now
+            apply_top_until(profile, base + timedelta(days=top_days))
+            session.add(profile)
+    payer.referral_plus_rewarded = True
+    session.add(payer)
+    session.add(referrer)
+    try:
+        await notify_referrer_joined(
+            settings,
+            referrer=referrer,
+            invited=payer,
+            total=await count_plus_invited(session, referrer) + 1,
+            bonus=0,
+            top_days=top_days,
+        )
+    except Exception:
+        logger.exception("Failed Plus-referral notify %s", referrer.telegram_id)
     return True

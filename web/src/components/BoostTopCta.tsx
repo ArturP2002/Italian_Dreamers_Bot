@@ -56,6 +56,7 @@ export function BoostTopCta({
         </span>
         <span className="boost-top-cta__copy">
           <strong>{t(language, "boostNeedVerifyTitle")}</strong>
+          <span>{t(language, "boostNeedVerifyHint")}</span>
         </span>
         <span className="boost-top-cta__chevron" aria-hidden>
           ›

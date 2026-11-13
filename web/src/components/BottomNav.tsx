@@ -75,6 +75,7 @@ export function bottomNavActive(pathname: string): NavId | null {
   if (pathname.startsWith("/inbox") || pathname.startsWith("/write/") || pathname.startsWith("/chat/")) {
     return "messages";
   }
+  if (pathname.startsWith("/profile")) return "profile";
   return null;
 }
 

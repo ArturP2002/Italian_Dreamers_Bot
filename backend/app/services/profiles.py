@@ -65,6 +65,73 @@ async def get_or_create_draft(session: AsyncSession, user: User) -> Profile:
     return profile
 
 
+async def seed_mini_anketa_from_letter(
+    session: AsyncSession,
+    *,
+    user: User,
+    name: str,
+    age: int,
+    photo_file_id: str | None,
+    adult_confirmed: bool = True,
+) -> Profile:
+    """First «Написать» becomes the draft Profile (photo + name + age + 18+).
+
+    Does not commit — caller owns the transaction.
+    """
+    from app.models import ProfilePhoto
+
+    profile = await get_user_profile(session, user.id)
+    if profile is None:
+        profile = Profile(
+            user_id=user.id,
+            gender=user.gender,
+            telegram_username=user.telegram_username,
+            status=ProfileStatus.DRAFT.value,
+        )
+        session.add(profile)
+        await session.flush()
+    if profile.status not in {ProfileStatus.DRAFT.value, ProfileStatus.REJECTED.value}:
+        return profile
+    cleaned = (name or "").strip()[:255]
+    if cleaned:
+        profile.name = cleaned
+    if 18 <= age <= 99:
+        profile.age = age
+    if adult_confirmed:
+        profile.personal_data_agreement = True
+    photos = list(profile.photos or [])
+    if photo_file_id and not photos:
+        session.add(
+            ProfilePhoto(
+                profile_id=profile.id,
+                file_id=photo_file_id,
+                position=0,
+            )
+        )
+    session.add(profile)
+    return profile
+
+
+def profile_completion_percent(profile: Profile | None) -> int:
+    """Rough readiness for soft nudges (0–100)."""
+    if profile is None:
+        return 0
+    checks = [
+        bool((profile.name or "").strip()),
+        bool(profile.age and profile.age >= 18),
+        bool(profile.photos),
+        bool(profile.personal_data_agreement),
+        bool((profile.city or "").strip()),
+        bool((profile.profession or "").strip()),
+        bool((profile.about or "").strip()),
+        bool((profile.desired_partner or "").strip()),
+        bool(profile.height_cm and profile.height_cm >= 140),
+        bool(profile.cover_question_id and (profile.cover_answer or "").strip()),
+    ]
+    done = sum(1 for c in checks if c)
+    return int(round(100 * done / len(checks)))
+
+
 def assert_editable(profile: Profile) -> None:
     if profile.status not in EDITABLE_STATUSES:
         raise ValueError(f"Profile status '{profile.status}' is not editable")

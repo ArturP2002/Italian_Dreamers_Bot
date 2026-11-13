@@ -35,6 +35,27 @@ async def live_catalog_count(session: AsyncSession) -> int:
     return floor_profile_count(int(result.scalar_one()))
 
 
+async def new_today_count(session: AsyncSession) -> int:
+    """Profiles that entered the catalog since Rome midnight (with active Plus)."""
+    from datetime import datetime, time, timezone
+
+    from app.services.catalog import _active_plus_user_ids_subq
+
+    day_start = datetime.combine(rome_today(), time.min, tzinfo=ROME).astimezone(timezone.utc)
+    entered = func.coalesce(Profile.paid_at, Profile.approved_at, Profile.published_at)
+    result = await session.execute(
+        select(func.count())
+        .select_from(Profile)
+        .where(
+            Profile.status.in_(list(CATALOG_STATUSES)),
+            Profile.user_id.in_(_active_plus_user_ids_subq()),
+            entered.is_not(None),
+            entered >= day_start,
+        )
+    )
+    return int(result.scalar_one())
+
+
 async def guest_seen_ids(session: AsyncSession, user_id: int, day: date) -> set[int]:
     result = await session.execute(
         select(CatalogProfileView.profile_id).where(

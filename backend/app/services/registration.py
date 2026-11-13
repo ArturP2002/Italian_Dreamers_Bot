@@ -1,4 +1,4 @@
-"""Paid registration gate helpers."""
+"""Registration + starter gift helpers (Plus-only model)."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Profile, ProfileStatus, User
+from app.services.entitlements import has_unlimited
 
 REGISTERED_STATUSES = {
     ProfileStatus.QUEUED.value,
@@ -14,6 +15,7 @@ REGISTERED_STATUSES = {
 
 
 def profile_is_registered(profile: Profile | None) -> bool:
+    """Catalog-visible registration (queued/published). Plus may still be required separately."""
     if profile is None:
         return False
     return profile.status in REGISTERED_STATUSES
@@ -24,52 +26,37 @@ async def user_is_registered(session: AsyncSession, user_id: int) -> bool:
     return profile_is_registered(result.scalar_one_or_none())
 
 
+async def user_can_use_app(session: AsyncSession, user_id: int) -> bool:
+    """Active Dreamers Plus — full write/read/catalog presence."""
+    return await has_unlimited(session, user_id)
+
+
 async def grant_starter_gifts(session: AsyncSession, user: User) -> bool:
-    """Give 3 message credits once on first app entry. Returns True if granted now."""
+    """Give 3 gift conversations once. Does NOT add message_credits (Plus-only)."""
     if user.gift_credits_granted:
         return False
-    from app.models import CreditLedgerEntry, LedgerEntryType
-
     user.gift_credits_granted = True
     user.gift_credits_left = 3
-    user.message_credits = (user.message_credits or 0) + 3
     session.add(user)
-    session.add(
-        CreditLedgerEntry(
-            user_id=user.id,
-            entry_type=LedgerEntryType.ADMIN_GRANT.value,
-            delta=3,
-            balance_after=user.message_credits,
-            note="starter_gifts_3",
-        )
-    )
     return True
 
 
 async def grant_registration_bonus(session: AsyncSession, user: User) -> bool:
-    """+1 credit after paid publish registration."""
+    """Legacy no-op under Plus-only (kept for call sites)."""
     if user.registration_bonus_granted:
         return False
-    from app.models import CreditLedgerEntry, LedgerEntryType
-
     user.registration_bonus_granted = True
-    user.message_credits = (user.message_credits or 0) + 1
     session.add(user)
-    session.add(
-        CreditLedgerEntry(
-            user_id=user.id,
-            entry_type=LedgerEntryType.ADMIN_GRANT.value,
-            delta=1,
-            balance_after=user.message_credits,
-            note="registration_bonus",
-        )
-    )
     return True
 
 
 def consume_gift_marker(user: User) -> bool:
-    """Mark one spend as coming from starter gifts. Returns True if still in gift pool."""
+    """Spend one gift conversation slot. Returns True if a gift was consumed."""
     if (user.gift_credits_left or 0) > 0:
         user.gift_credits_left -= 1
         return True
     return False
+
+
+def gifts_remaining(user: User) -> int:
+    return max(0, int(user.gift_credits_left or 0))

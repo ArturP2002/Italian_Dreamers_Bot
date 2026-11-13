@@ -111,6 +111,38 @@ async def scheduler_loop(stop_event: asyncio.Event, interval_seconds: float = 60
         except Exception:
             logger.exception("Scheduler tick failed (letter timeout)")
         try:
+            from app.services.subscription_jobs import (
+                notify_credits_cut_once,
+                process_subscription_renewal_reminders,
+            )
+
+            reminded = await process_subscription_renewal_reminders(settings)
+            if reminded:
+                logger.info("Subscription renewal reminders: %s", reminded)
+            cut = await notify_credits_cut_once(settings)
+            if cut:
+                logger.info("Credits-cut notices: %s", cut)
+        except Exception:
+            logger.exception("Scheduler tick failed (subscription jobs)")
+        try:
+            # Once per Rome day around 18:00 — cheap throttle via module flag.
+            from datetime import datetime
+            from zoneinfo import ZoneInfo
+
+            from app.services.newcomers import publish_daily_newcomers
+
+            rome = ZoneInfo("Europe/Rome")
+            now_rome = datetime.now(rome)
+            stamp = getattr(scheduler_loop, "_newcomers_day", None)
+            if now_rome.hour >= 18 and stamp != now_rome.date().isoformat():
+                async with async_session_factory() as session:
+                    stats = await publish_daily_newcomers(session, settings)
+                scheduler_loop._newcomers_day = now_rome.date().isoformat()  # type: ignore[attr-defined]
+                if stats.get("batches"):
+                    logger.info("Newcomers collage: %s", stats)
+        except Exception:
+            logger.exception("Scheduler tick failed (newcomers)")
+        try:
             await asyncio.wait_for(stop_event.wait(), timeout=interval_seconds)
         except asyncio.TimeoutError:
             continue

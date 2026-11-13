@@ -26,6 +26,9 @@ export type MeUser = {
   is_registered?: boolean;
   gift_credits_left?: number;
   first_message_free_used?: boolean;
+  anketa_percent?: number;
+  subscription_canceled?: boolean;
+  unread_locked_count?: number;
 };
 
 export type ProfilePhoto = {
@@ -203,6 +206,7 @@ export type CatalogPage = {
 
 export type CatalogStats = {
   total_count: number;
+  new_today_count?: number;
   is_registered: boolean;
   teaser_photo_urls: string[];
 };
@@ -367,6 +371,7 @@ export type MessageRequestItem = {
   i_shared_telegram?: boolean;
   peer_shared_telegram?: boolean;
   moved_to_telegram?: boolean;
+  content_locked?: boolean;
 };
 
 export type InboxResponse = {
@@ -393,6 +398,8 @@ export type WriteTarget = {
     city: string | null;
     photo_url: string | null;
   } | null;
+  recipient_active?: boolean;
+  anketa_percent?: number;
 };
 
 export type ChatMessageItem = {
@@ -1073,6 +1080,10 @@ export async function toggleCatalogLike(profileId: number): Promise<{ liked: boo
 
 export async function fetchLikes(kind: "sent" | "received"): Promise<{ items: CatalogCard[] }> {
   return (await apiFetch<{ items: CatalogCard[] }>(`/api/likes?kind=${kind}`)) ?? { items: [] };
+}
+
+export async function fetchNewcomers(): Promise<{ items: CatalogCard[] }> {
+  return (await apiFetch<{ items: CatalogCard[] }>("/api/catalog/newcomers")) ?? { items: [] };
 }
 
 export async function buyUnlimited(): Promise<{ ok: boolean; already?: boolean; stars?: number }> {

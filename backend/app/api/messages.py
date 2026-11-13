@@ -36,6 +36,7 @@ from app.services.profiles import get_user_profile
 from app.services.referrals import (
     claim_referral,
     count_invited,
+    count_plus_invited,
     ensure_referral_code,
     referral_link,
     referral_top_days_for_invites,
@@ -92,6 +93,7 @@ class MessageRequestOut(BaseModel):
     i_shared_telegram: bool = False
     peer_shared_telegram: bool = False
     moved_to_telegram: bool = False
+    content_locked: bool = False
 
 
 class InboxOut(BaseModel):
@@ -119,6 +121,8 @@ class WriteTargetOut(BaseModel):
     age_max: int
     verified: bool = False
     sender: SenderIdentityOut | None = None
+    recipient_active: bool = True
+    anketa_percent: int = 0
 
 
 class ChatOut(BaseModel):
@@ -243,6 +247,7 @@ def _raise_service(exc: MessageServiceError) -> None:
         "age_invalid": status.HTTP_400_BAD_REQUEST,
         "bad_status": status.HTTP_409_CONFLICT,
         "no_credits": status.HTTP_402_PAYMENT_REQUIRED,
+        "need_plus": status.HTTP_402_PAYMENT_REQUIRED,
         "locked": status.HTTP_409_CONFLICT,
         "profile_deleted": status.HTTP_409_CONFLICT,
     }
@@ -291,16 +296,41 @@ def _serialize_request(mr: MessageRequest, viewer: User, *, has_unlimited: bool 
         reply_text = None
         reply_text_translated = None
 
-    can_reply = is_incoming and status_val in {
-        MessageRequestStatus.PENDING.value,
-        MessageRequestStatus.EXPIRED.value,
-    }
+    # No / expired Plus: hide new incoming letter body; open chats stay readable.
+    content_locked = False
+    letter_text = mr.text
+    letter_text_translated = mr.text_translated
+    if (
+        is_incoming
+        and not has_unlimited
+        and status_val
+        in {
+            MessageRequestStatus.PENDING.value,
+            MessageRequestStatus.EXPIRED.value,
+            MessageRequestStatus.REPLIED.value,
+        }
+    ):
+        content_locked = True
+        letter_text = ""
+        letter_text_translated = None
+        reply_text = None
+        reply_text_translated = None
+
+    can_reply = (
+        is_incoming
+        and has_unlimited
+        and status_val
+        in {
+            MessageRequestStatus.PENDING.value,
+            MessageRequestStatus.EXPIRED.value,
+        }
+    )
     return MessageRequestOut(
         id=mr.id,
         status=status_val,
         direction=direction,
-        text=mr.text,
-        text_translated=mr.text_translated,
+        text=letter_text,
+        text_translated=letter_text_translated,
         reply_text=reply_text,
         reply_text_translated=reply_text_translated,
         sender_name=mr.sender_name,
@@ -319,7 +349,7 @@ def _serialize_request(mr: MessageRequest, viewer: User, *, has_unlimited: bool 
         created_at=mr.created_at,
         responded_at=mr.responded_at,
         can_reply=can_reply,
-        can_reject=is_incoming and status_val == MessageRequestStatus.PENDING.value,
+        can_reject=is_incoming and has_unlimited and status_val == MessageRequestStatus.PENDING.value,
         can_unlock=(
             not is_incoming
             and status_val == MessageRequestStatus.REPLIED.value
@@ -332,6 +362,7 @@ def _serialize_request(mr: MessageRequest, viewer: User, *, has_unlimited: bool 
         i_shared_telegram=i_shared,
         peer_shared_telegram=peer_shared,
         moved_to_telegram=i_shared or peer_shared,
+        content_locked=content_locked,
     )
 
 
@@ -378,6 +409,10 @@ async def write_target(
         photo = _photo_url(first.file_id)
     identity = await _resolve_sender_identity(session, auth.user)
     from app.models import VerificationStatus
+    from app.services.profiles import get_user_profile, profile_completion_percent
+
+    recipient_active = await has_unlimited(session, profile.user_id)
+    my_profile = await get_user_profile(session, auth.user.id)
 
     return WriteTargetOut(
         profile_id=profile.id,
@@ -398,6 +433,8 @@ async def write_target(
         )
         if identity
         else None,
+        recipient_active=recipient_active,
+        anketa_percent=profile_completion_percent(my_profile),
     )
 
 
@@ -462,21 +499,19 @@ async def create_letter(
         uploaded = True
 
     identity = await _resolve_sender_identity(session, auth.user)
-    if identity is not None:
-        name_value, age_value = identity.name, identity.age
-        if not uploaded:
-            photo_file_id = identity.photo_file_id
-    else:
-        name_value = (sender_name or "").strip()
-        if not name_value or len(name_value) > STATED_NAME_MAX:
-            raise HTTPException(
-                status_code=400, detail={"code": "name_invalid", "message": "Invalid sender name"}
-            )
-        if sender_age is None:
-            raise HTTPException(
-                status_code=400, detail={"code": "age_invalid", "message": "Invalid sender age"}
-            )
-        age_value = sender_age
+    # Prefill from saved identity, but allow edits from the form.
+    name_value = (sender_name or "").strip() or (identity.name if identity else "")
+    if identity is not None and not uploaded:
+        photo_file_id = photo_file_id or identity.photo_file_id
+    if not name_value or len(name_value) > STATED_NAME_MAX:
+        raise HTTPException(
+            status_code=400, detail={"code": "name_invalid", "message": "Invalid sender name"}
+        )
+    age_value = sender_age if sender_age is not None else (identity.age if identity else None)
+    if age_value is None:
+        raise HTTPException(
+            status_code=400, detail={"code": "age_invalid", "message": "Invalid sender age"}
+        )
 
     if not photo_file_id:
         raise HTTPException(
@@ -494,7 +529,7 @@ async def create_letter(
             sender_name=name_value,
             sender_age=age_value,
             sender_photo_file_id=photo_file_id,
-            remember_identity=identity is None or identity.source == "saved",
+            remember_identity=True,
         )
     except MessageServiceError as exc:
         _raise_service(exc)
@@ -608,24 +643,11 @@ async def buy_credits(
     session: AsyncSession = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict:
-    if body.message_request_id is not None:
-        mr = await get_message_request(session, body.message_request_id, for_user=auth.user)
-        if mr is None or mr.sender_user_id != auth.user.id:
-            raise HTTPException(status_code=404, detail="Message request not found")
-    payment = await create_credit_payment(
-        session,
-        settings,
-        user=auth.user,
-        message_request_id=body.message_request_id,
-        pack=body.pack,
+    # Plus-only: per-message credits are discontinued.
+    raise HTTPException(
+        status_code=410,
+        detail={"code": "need_plus", "message": "Credits discontinued — Dreamers Plus required"},
     )
-    await send_credit_invoice(settings, user=auth.user, payment=payment)
-    return {
-        "ok": True,
-        "payment_id": payment.id,
-        "stars": payment.stars_amount,
-        "pack": body.pack,
-    }
 
 
 @router.get("/messages/{request_id}/chat", response_model=ChatOut)
@@ -742,15 +764,16 @@ async def _referral_out(session: AsyncSession, settings: Settings, user: User) -
     await session.commit()
     await session.refresh(user)
     invited = await count_invited(session, user)
+    plus_invited = await count_plus_invited(session, user)
     top_days = max(0, settings.referral_bonus_top_days)
     return ReferralOut(
         code=code,
         link=await referral_link(settings, code),
         referred_by_user_id=user.referred_by_user_id,
         invited_count=invited,
-        bonus_credits=max(0, settings.referral_bonus_credits),
+        bonus_credits=0,
         bonus_top_days=top_days,
-        top_days_earned=referral_top_days_for_invites(settings, invited),
+        top_days_earned=referral_top_days_for_invites(settings, plus_invited),
     )
 
 

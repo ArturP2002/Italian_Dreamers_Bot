@@ -118,17 +118,37 @@ async def catalog_stats(
     auth: AuthContext = Depends(get_auth_context),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    from app.services.catalog_gate import live_catalog_count, waiting_teaser_urls
+    from app.services.catalog_gate import live_catalog_count, new_today_count, waiting_teaser_urls
     from app.services.registration import profile_is_registered
 
     own = await get_user_profile(session, auth.user.id)
     count = await live_catalog_count(session)
+    today = await new_today_count(session)
     teasers = await waiting_teaser_urls(session, auth.user.gender or (own.gender if own else None))
     return {
         "total_count": count,
+        "new_today_count": today,
         "is_registered": profile_is_registered(own),
         "teaser_photo_urls": teasers,
     }
+
+
+@router.get("/newcomers")
+async def catalog_newcomers(
+    auth: AuthContext = Depends(get_auth_context),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    from app.services.newcomers import list_today_newcomers
+
+    profiles = await list_today_newcomers(session)
+    ids = [p.id for p in profiles]
+    written = await written_profile_ids(session, sender_id=auth.user.id, profile_ids=ids)
+    lang = _viewer_lang(auth)
+    items = [
+        _card(p, written, fields=localized_catalog_fields(p, lang))
+        for p in profiles
+    ]
+    return {"items": items}
 
 
 @router.get("", response_model=CatalogPage)

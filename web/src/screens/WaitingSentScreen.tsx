@@ -69,6 +69,19 @@ export function WaitingSentScreen({ language, me, onMeRefresh }: Props) {
       <h1 className="waiting-title">{t(language, "waitingSentTitle")}</h1>
       <p className="waiting-body">{tf(language, "waitingSentBody", { name })}</p>
 
+      {(me?.anketa_percent ?? 0) < 90 && me?.has_unlimited !== true ? (
+        <p className="waiting-nudge">
+          {tf(language, "waitingAnketaNudge", { n: me?.anketa_percent ?? 40 })}
+          <Link to="/profile">{t(language, "waitingAnketaCta")}</Link>
+        </p>
+      ) : null}
+      {(me?.gift_credits_left ?? 0) <= 0 && me?.has_unlimited !== true ? (
+        <p className="waiting-nudge waiting-nudge--plus">
+          {t(language, "waitingGiftsGone")}
+          <Link to="/credits">{t(language, "waitingPlusCta")}</Link>
+        </p>
+      ) : null}
+
       <article className="waiting-card">
         {teasers.length > 0 ? (
           <div className="waiting-card__grid">

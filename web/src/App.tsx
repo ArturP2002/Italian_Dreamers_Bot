@@ -19,6 +19,7 @@ import { ReferralScreen } from "./screens/ReferralScreen";
 import { SupportScreen } from "./screens/SupportScreen";
 import { LikesScreen } from "./screens/LikesScreen";
 import { VerifyScreen } from "./screens/VerifyScreen";
+import { NewcomersScreen } from "./screens/NewcomersScreen";
 import { WaitingSentScreen } from "./screens/WaitingSentScreen";
 import { WriteLetterScreen } from "./screens/WriteLetterScreen";
 
@@ -157,6 +158,8 @@ export default function App() {
         }
       } else if (param === "referral") {
         navigate("/referral", { replace: true });
+      } else if (param === "newcomers") {
+        navigate("/newcomers", { replace: true });
       } else if (param === "ads") {
         navigate("/ads", { replace: true });
       } else if (param === "admin") {
@@ -258,6 +261,7 @@ export default function App() {
           element={<CreditsScreen language={language} onCreditsChange={() => void refreshMe()} />}
         />
         <Route path="/referral" element={<ReferralScreen language={language} />} />
+        <Route path="/newcomers" element={<NewcomersScreen language={language} />} />
         <Route path="/ads" element={<AdFormScreen language={language} />} />
         <Route
           path="/profile/*"

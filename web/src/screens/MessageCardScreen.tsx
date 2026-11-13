@@ -2,8 +2,6 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { type Language, t, tf } from "../i18n/messages";
 import {
-  buyMessageCredits,
-  fetchConfig,
   fetchMessage,
   fileComplaint,
   mediaUrl,
@@ -11,7 +9,6 @@ import {
   replyMessage,
   unlockMessage,
   type MessageRequestItem,
-  type PublicConfig,
 } from "../lib/api";
 
 type Props = { language: Language; onCreditsChange?: () => void };
@@ -21,7 +18,6 @@ export function MessageCardScreen({ language, onCreditsChange }: Props) {
   const navigate = useNavigate();
   const requestId = Number(id);
   const [item, setItem] = useState<MessageRequestItem | null>(null);
-  const [config, setConfig] = useState<PublicConfig | null>(null);
   const [showOriginal, setShowOriginal] = useState(false);
   const [reply, setReply] = useState("");
   const [busy, setBusy] = useState(false);
@@ -38,7 +34,6 @@ export function MessageCardScreen({ language, onCreditsChange }: Props) {
 
   useEffect(() => {
     void reload();
-    void fetchConfig().then(setConfig);
   }, [requestId]);
 
   if (!item) {
@@ -99,26 +94,12 @@ export function MessageCardScreen({ language, onCreditsChange }: Props) {
       navigate(`/chat/${item.id}`, { replace: true });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "";
-      if (msg.includes("no_credits") || msg.includes("402")) {
+      if (msg.includes("need_plus") || msg.includes("no_credits") || msg.includes("402")) {
         setError(null);
-        setInfo(t(language, "unlockHint"));
+        setInfo(t(language, "unlockNeedPlus"));
       } else {
         setError(t(language, "errorGeneric"));
       }
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const onBuy = async (pack: boolean) => {
-    setBusy(true);
-    setError(null);
-    setInfo(null);
-    try {
-      await buyMessageCredits({ pack, messageRequestId: item.id });
-      setInfo(t(language, "invoiceSent"));
-    } catch {
-      setError(t(language, "errorGeneric"));
     } finally {
       setBusy(false);
     }
@@ -261,60 +242,40 @@ export function MessageCardScreen({ language, onCreditsChange }: Props) {
           </div>
         ) : null}
 
+        {item.content_locked ? (
+          <div className="letter-card__actions letter-card__pay">
+            <h2 className="work-title" style={{ fontSize: 28 }}>
+              {t(language, "inboxLockedTitle")}
+            </h2>
+            <p className="work-body">{t(language, "inboxLockedHint")}</p>
+            <Link to="/credits" className="btn btn--block btn--plum btn--pill">
+              {t(language, "waitingPlusCta")}
+            </Link>
+          </div>
+        ) : null}
+
         {item.can_unlock ? (
           <div className="letter-card__actions letter-card__pay">
             <h2 className="work-title" style={{ fontSize: 28 }}>
               {t(language, "unlockTitle")}
             </h2>
             <p className="work-body">{t(language, "unlockHint")}</p>
-            {item.has_unlimited ? (
-              <button
-                type="button"
-                className="btn btn--block btn--dark"
-                disabled={busy}
-                onClick={() => void onUnlock()}
-              >
-                {t(language, "unlockUnlimited")}
-              </button>
-            ) : (
+            {item.has_unlimited || (item.gift_credits_left ?? 0) > 0 ? (
               <button
                 type="button"
                 className="btn btn--block btn--plum btn--pill"
                 disabled={busy}
                 onClick={() => void onUnlock()}
               >
-                {(item.gift_credits_left ?? 0) > 0
-                  ? tf(language, "unlockWithGift", { n: item.gift_credits_left ?? 0 })
-                  : item.message_credits >= 1
-                    ? tf(language, "unlockWithCredit", { n: item.message_credits })
-                    : t(language, "unlockOpen")}
+                {item.has_unlimited
+                  ? t(language, "unlockUnlimited")
+                  : tf(language, "unlockWithGift", { n: item.gift_credits_left ?? 0 })}
               </button>
+            ) : (
+              <Link to="/credits" className="btn btn--block btn--plum btn--pill">
+                {t(language, "unlockNeedPlus")}
+              </Link>
             )}
-            {!item.has_unlimited ? (
-            <>
-            <button
-              type="button"
-              className="btn btn--block btn--champagne"
-              disabled={busy}
-              onClick={() => void onBuy(false)}
-            >
-              {tf(language, "buyOneCredit", {
-                stars: config?.prices.message_credit_stars ?? "—",
-              })}
-            </button>
-            <button
-              type="button"
-              className="btn btn--block btn--ghost"
-              disabled={busy}
-              onClick={() => void onBuy(true)}
-            >
-              {tf(language, "buyPack", {
-                size: config?.prices.message_pack_size ?? 10,
-                stars: config?.prices.message_pack_10_stars ?? "—",
-              })}
-            </button>
-            </>
-            ) : null}
           </div>
         ) : null}
 

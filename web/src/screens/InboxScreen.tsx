@@ -59,6 +59,9 @@ function cardPhoto(item: MessageRequestItem): string | null {
 }
 
 function previewText(item: MessageRequestItem, language: Language): string {
+  if (item.content_locked) {
+    return t(language, "inboxLockedPreview");
+  }
   const showTranslated = language === "ru" || language === "it";
   if (item.direction === "incoming") {
     return (showTranslated && item.text_translated) || item.text;
@@ -249,6 +252,12 @@ export function InboxScreen({ language, me, onMeRefresh }: Props) {
         ← {t(language, "backHome")}
       </Link>
       <h1 className="work-title">{t(language, "inboxTitle")}</h1>
+      {(me?.unread_locked_count ?? 0) > 0 && !me?.has_unlimited ? (
+        <p className="inbox-locked-banner">
+          {tf(language, "inboxLockedBanner", { n: me?.unread_locked_count ?? 0 })}{" "}
+          <Link to="/credits">{t(language, "waitingPlusCta")}</Link>
+        </p>
+      ) : null}
       {pending > 0 ? (
         <p className="home-meta">
           {t(language, "homeLettersBadge")}: {pending}

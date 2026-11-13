@@ -156,37 +156,28 @@ async def _charge_send(
     sender: User,
     mr: MessageRequest,
 ) -> None:
-    """First send ever is free. Later: hold 1 credit (or unlimited)."""
-    from app.services.registration import consume_gift_marker
+    """Plus-only: send allowed with active Plus OR remaining gift slots.
+
+    Gifts are not spent on send — only when the recipient replies (unlock).
+    Letters without a reply never consume a gift.
+    """
+    from app.services.registration import gifts_remaining
 
     unlimited = await has_unlimited(session, sender.id)
-    if not sender.first_message_free_used:
-        sender.first_message_free_used = True
-        mr.paid_at_send = False
-        mr.credit_held = 0
-        session.add(sender)
-        return
     if unlimited:
         mr.paid_at_send = True
         mr.credit_held = 0
+        sender.first_message_free_used = True
+        session.add(sender)
         return
-    if sender.message_credits < 1:
-        raise MessageServiceError("no_credits", "Not enough message credits")
-    sender.message_credits -= 1
-    consume_gift_marker(sender)
-    mr.paid_at_send = True
-    mr.credit_held = 1
-    session.add(sender)
-    session.add(
-        CreditLedgerEntry(
-            user_id=sender.id,
-            entry_type=LedgerEntryType.SPEND.value,
-            delta=-1,
-            balance_after=sender.message_credits,
-            message_request_id=mr.id,
-            note="send_letter_hold",
-        )
-    )
+    if gifts_remaining(sender) > 0:
+        # Pending gift letter — no debit until reply opens the chat.
+        mr.paid_at_send = False
+        mr.credit_held = 0
+        sender.first_message_free_used = True
+        session.add(sender)
+        return
+    raise MessageServiceError("need_plus", "Dreamers Plus required to write")
 
 
 async def refund_held_credit(
@@ -293,6 +284,16 @@ async def create_message_request(
         if sender_photo_file_id:
             sender.stated_photo_file_id = sender_photo_file_id
         session.add(sender)
+        from app.services.profiles import seed_mini_anketa_from_letter
+
+        await seed_mini_anketa_from_letter(
+            session,
+            user=sender,
+            name=name,
+            age=sender_age,
+            photo_file_id=sender_photo_file_id,
+            adult_confirmed=True,
+        )
 
     mr = MessageRequest(
         profile_id=profile.id,
@@ -367,6 +368,8 @@ async def reject_message_request(
 ) -> MessageRequest:
     if mr.profile is None or mr.profile.user_id != actor.id:
         raise MessageServiceError("forbidden", "Only recipient can reject")
+    if not await has_unlimited(session, actor.id):
+        raise MessageServiceError("need_plus", "Dreamers Plus required to manage letters")
     if mr.status != MessageRequestStatus.PENDING.value:
         raise MessageServiceError("bad_status", "Request is not pending")
     refunded = await refund_held_credit(session, mr=mr, note="letter_rejected_refund")
@@ -393,6 +396,8 @@ async def reply_message_request(
 ) -> MessageRequest:
     if mr.profile is None or mr.profile.user_id != actor.id:
         raise MessageServiceError("forbidden", "Only recipient can reply")
+    if not await has_unlimited(session, actor.id):
+        raise MessageServiceError("need_plus", "Dreamers Plus required to read and reply")
     if mr.status not in {
         MessageRequestStatus.PENDING.value,
         MessageRequestStatus.EXPIRED.value,
@@ -419,18 +424,21 @@ async def reply_message_request(
     mr.responded_at = datetime.now(timezone.utc)
     session.add(mr)
 
-    # Always require unlock (or unlimited auto-unlock). Held credit is consumed at unlock.
+    # Auto-open with Plus or remaining gift; otherwise initiator must buy Plus.
     mr.status = MessageRequestStatus.REPLIED.value
     await session.commit()
     mr = await get_message_request(session, mr.id)
     assert mr is not None
     if mr.sender:
-        if await has_unlimited(session, mr.sender.id):
-            mr = await unlock_with_credit(session, settings, mr=mr, actor=mr.sender)
-            await session.refresh(mr.sender)
-            await notify_initiator_chat_opened(settings, initiator=mr.sender, request=mr)
+        from app.services.registration import gifts_remaining
+
+        sender = mr.sender
+        if await has_unlimited(session, sender.id) or gifts_remaining(sender) > 0:
+            mr = await unlock_with_credit(session, settings, mr=mr, actor=sender)
+            await session.refresh(sender)
+            await notify_initiator_chat_opened(settings, initiator=sender, request=mr)
         else:
-            await notify_initiator_pay_to_unlock(settings, initiator=mr.sender, request=mr)
+            await notify_initiator_pay_to_unlock(settings, initiator=sender, request=mr)
     return mr
 
 
@@ -442,7 +450,8 @@ async def unlock_with_credit(
     actor: User,
     payment_id: int | None = None,
 ) -> MessageRequest:
-    from app.services.registration import consume_gift_marker
+    """Open chat after reply: Plus (free) or spend one gift. Credits no longer work."""
+    from app.services.registration import consume_gift_marker, gifts_remaining
 
     if mr.sender_user_id != actor.id:
         raise MessageServiceError("forbidden", "Only initiator can unlock")
@@ -458,31 +467,14 @@ async def unlock_with_credit(
     unlimited = await has_unlimited(session, actor.id)
     from_gift = False
     if not unlimited:
-        if mr.credit_held >= 1:
-            # Already held at send — consume hold, no second debit.
-            mr.credit_held = 0
-            from_gift = (actor.gift_credits_left or 0) < 3 and (actor.gift_credits_granted)
-        else:
-            if actor.message_credits < 1:
-                raise MessageServiceError("no_credits", "Not enough message credits")
-            actor.message_credits -= 1
-            from_gift = consume_gift_marker(actor)
-            session.add(actor)
-            session.add(
-                CreditLedgerEntry(
-                    user_id=actor.id,
-                    entry_type=LedgerEntryType.SPEND.value,
-                    delta=-1,
-                    balance_after=actor.message_credits,
-                    payment_id=payment_id,
-                    message_request_id=mr.id,
-                    note="unlock_chat",
-                )
-            )
+        if gifts_remaining(actor) < 1:
+            raise MessageServiceError("need_plus", "Dreamers Plus required to open chat")
+        from_gift = consume_gift_marker(actor)
+        session.add(actor)
+    mr.credit_held = 0
     now = datetime.now(timezone.utc)
     mr.status = MessageRequestStatus.CHATTING.value
     mr.unlocked_at = now
-    mr.credit_held = 0
     mr.unlock_from_gift = from_gift
     if payment_id:
         mr.charged_payment_id = payment_id

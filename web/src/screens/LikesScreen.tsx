@@ -16,8 +16,8 @@ export function LikesScreen({ language }: Props) {
   }, [kind]);
 
   return (
-    <section className="screen screen--milky">
-      <Link to="/" className="work-back">
+    <section className="screen screen--milky screen--has-float-back">
+      <Link to="/" className="work-back work-back--float">
         ← {t(language, "backHome")}
       </Link>
       <h1 className="work-title">{t(language, "likesTitle")}</h1>

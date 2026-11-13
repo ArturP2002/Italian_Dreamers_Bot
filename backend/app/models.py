@@ -190,6 +190,13 @@ class User(Base):
     referred_by_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
+    # True after referrer already received +N top days for this user's Plus purchase.
+    referral_plus_rewarded: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    credits_cut_notified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -291,6 +298,8 @@ class Profile(Base):
     verification_auto_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     top_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    newcomers_collage_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    newcomers_batch_date: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     name_translated: Mapped[str | None] = mapped_column(String(255), nullable=True)
     city_translated: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -602,6 +611,7 @@ class Subscription(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     canceled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    renewal_reminded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     telegram_charge_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     payment_id: Mapped[int | None] = mapped_column(ForeignKey("payments.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

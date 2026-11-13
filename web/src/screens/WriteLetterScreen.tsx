@@ -112,15 +112,13 @@ export function WriteLetterScreen({ language, me, onCreditsChange }: Props) {
   const onSubmit = async () => {
     setError(null);
     const ageNum = Number(age);
-    if (!sender) {
-      if (!name.trim()) {
-        setError(t(language, "writeNameInvalid"));
-        return;
-      }
-      if (!Number.isFinite(ageNum) || ageNum < 18 || ageNum > 99) {
-        setError(t(language, "writeAgeInvalid"));
-        return;
-      }
+    if (!name.trim()) {
+      setError(t(language, "writeNameInvalid"));
+      return;
+    }
+    if (!Number.isFinite(ageNum) || ageNum < 18 || ageNum > 99) {
+      setError(t(language, "writeAgeInvalid"));
+      return;
     }
     if (!hasPhoto) {
       setError(t(language, "writePhotoRequired"));
@@ -146,8 +144,8 @@ export function WriteLetterScreen({ language, me, onCreditsChange }: Props) {
       const created = await createLetter({
         profileId: id,
         text: text.trim(),
-        senderName: sender ? undefined : name.trim(),
-        senderAge: sender ? undefined : ageNum,
+        senderName: name.trim(),
+        senderAge: ageNum,
         photo,
         // The helper line under the photo is the confirmation: «only you, face visible».
         photoIsMine: true,
@@ -182,7 +180,9 @@ export function WriteLetterScreen({ language, me, onCreditsChange }: Props) {
           "age_invalid",
         ];
         code = known.find((k) => raw.includes(k)) ?? "";
-        if (!code && (raw.includes("no_credits") || raw.includes("402"))) code = "no_credits";
+        if (!code && (raw.includes("need_plus") || raw.includes("no_credits") || raw.includes("402"))) {
+          code = "need_plus";
+        }
       }
 
       const textByCode: Record<string, string> = {
@@ -198,7 +198,8 @@ export function WriteLetterScreen({ language, me, onCreditsChange }: Props) {
         group_photo: t(language, "writeOnlyYou"),
         name_invalid: t(language, "writeNameInvalid"),
         age_invalid: t(language, "writeAgeInvalid"),
-        no_credits: t(language, "writeNeedCredit"),
+        no_credits: t(language, "writeNeedPlus"),
+        need_plus: t(language, "writeNeedPlus"),
       };
       const message = textByCode[code] ?? t(language, "errorGeneric");
       setError(message);
@@ -246,6 +247,10 @@ export function WriteLetterScreen({ language, me, onCreditsChange }: Props) {
         </div>
       </div>
 
+      {target.recipient_active === false ? (
+        <p className="write-offline-note">{tf(language, "writeRecipientOffline", { name: target.name })}</p>
+      ) : null}
+
       {giftLeft > 0 ? (
         <div className="gift-banner">
           <span className="gift-banner__icon">
@@ -256,6 +261,23 @@ export function WriteLetterScreen({ language, me, onCreditsChange }: Props) {
             <span>{tf(language, "giftBannerSub", { name: target.name })}</span>
           </span>
         </div>
+      ) : me?.has_unlimited ? null : (
+        <div className="gift-banner gift-banner--plus">
+          <span className="gift-banner__text">
+            <strong>{t(language, "writeNeedPlusBanner")}</strong>
+            <span>
+              <Link to="/credits">{t(language, "waitingPlusCta")}</Link>
+            </span>
+          </span>
+        </div>
+      )}
+
+      {(target.anketa_percent ?? me?.anketa_percent ?? 0) > 0 ? (
+        <p className="write-progress">
+          {tf(language, "writeAnketaProgress", {
+            n: target.anketa_percent ?? me?.anketa_percent ?? 40,
+          })}
+        </p>
       ) : null}
 
       <div className="write-about">
@@ -295,7 +317,6 @@ export function WriteLetterScreen({ language, me, onCreditsChange }: Props) {
               id="write-name"
               value={name}
               maxLength={20}
-              readOnly={Boolean(sender)}
               onChange={(e) => {
                 setName(e.target.value);
                 setError(null);
@@ -308,7 +329,6 @@ export function WriteLetterScreen({ language, me, onCreditsChange }: Props) {
               id="write-age"
               inputMode="numeric"
               value={age}
-              readOnly={Boolean(sender)}
               onChange={(e) => {
                 setAge(e.target.value.replace(/\D/g, "").slice(0, 2));
                 setError(null);

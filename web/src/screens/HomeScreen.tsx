@@ -3,10 +3,10 @@ import { Link } from "react-router-dom";
 import { homeAssets } from "../assets/backgrounds";
 import { AddToHomeCard } from "../components/AddToHomeCard";
 import { BoostTopCta } from "../components/BoostTopCta";
-import { TricolorHeart } from "../components/TricolorHeart";
 import { LanguageToggle } from "../components/LanguageToggle";
 import { greetingKey, type Language, t, tf } from "../i18n/messages";
 import {
+  fetchCatalogStats,
   fetchConfig,
   fetchInbox,
   fetchLikes,
@@ -84,6 +84,7 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
   const [payMsg, setPayMsg] = useState<string | null>(null);
   const [pendingLetters, setPendingLetters] = useState(0);
   const [likesReceived, setLikesReceived] = useState(0);
+  const [newToday, setNewToday] = useState(0);
   const [channelUrl, setChannelUrl] = useState("https://t.me/italiandreamers");
   const [channelMembers, setChannelMembers] = useState(20000);
   const [config, setConfig] = useState<PublicConfig | null>(null);
@@ -94,6 +95,9 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
   useEffect(() => {
     void fetchInbox().then((data) => {
       setPendingLetters(data?.pending_incoming ?? 0);
+    });
+    void fetchCatalogStats().then((stats) => {
+      setNewToday(stats?.new_today_count ?? 0);
     });
     if (me?.is_registered === false) {
       setLikesReceived(0);
@@ -143,7 +147,6 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
     }
   };
 
-  const credits = me?.message_credits ?? 0;
   const showVerify =
     hasProfile && status !== "draft" && me?.verification_status !== "verified";
   const stars = config?.prices.profile_publish_stars ?? 1000;
@@ -180,7 +183,6 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
 
       <header className="home-header">
         <div className="home-brand">
-          <TricolorHeart className="tricolor-heart" />
           <span>{t(language, "homeBrand")}</span>
         </div>
         <div className="home-avatar" aria-hidden>
@@ -190,79 +192,71 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
 
       <h1 className="home-greeting">{greeting}</h1>
 
-      {isPublished ? (
-        <div className="home-boost-only">
+      <article className={`home-funnel${isPublished ? " home-funnel--published" : ""}`}>
+        <p className="home-funnel__eyebrow">{t(language, "homeYourProfile")}</p>
+        {!isPublished ? (
+          <>
+            <h2 className="home-funnel__title">{funnelTitle}</h2>
+            {funnelHint ? <p className="home-funnel__hint">{funnelHint}</p> : null}
+          </>
+        ) : null}
+
+        <ol className="home-stepper" aria-label={t(language, "homeYourProfile")}>
+          {FUNNEL_STEPS.map((key, index) => {
+            const done = index < currentStep;
+            const current = index === currentStep && currentStep < 5;
+            return (
+              <li
+                key={key}
+                className={`home-stepper__item${done ? " is-done" : ""}${current ? " is-current" : ""}`}
+              >
+                <span className="home-stepper__dot" aria-hidden>
+                  {done ? "✓" : current ? <span className="home-stepper__pip" /> : null}
+                </span>
+                <span className="home-stepper__label">{t(language, key)}</span>
+              </li>
+            );
+          })}
+        </ol>
+
+        {needsProfile ? (
+          <Link to="/profile" className="btn btn--block btn--dark home-funnel__cta">
+            {t(language, "homeFillCta")}
+          </Link>
+        ) : null}
+
+        {isRejected ? (
+          <Link to="/profile" className="btn btn--block btn--dark home-funnel__cta">
+            {t(language, "homeFunnelFixCta")}
+          </Link>
+        ) : null}
+
+        {awaitingPay ? (
+          <button
+            type="button"
+            className="btn btn--block btn--dark home-funnel__cta"
+            disabled={payBusy}
+            onClick={() => void onPay()}
+          >
+            {rub > 0
+              ? tf(language, "homeFunnelPayCtaRub", { rub: rub.toLocaleString("ru-RU"), stars })
+              : tf(language, "homeFunnelPayCta", { stars })}
+          </button>
+        ) : null}
+
+        {isQueued || isPublished ? (
           <BoostTopCta
             language={language}
             verified={me?.verification_status === "verified"}
             isTop={Boolean(me?.is_top)}
             topUntil={me?.top_until}
             starsOnly={language === "it"}
+            className="home-funnel__boost"
           />
-        </div>
-      ) : (
-        <article className="home-funnel">
-          <p className="home-funnel__eyebrow">{t(language, "homeYourProfile")}</p>
-          <h2 className="home-funnel__title">{funnelTitle}</h2>
-          {funnelHint ? <p className="home-funnel__hint">{funnelHint}</p> : null}
+        ) : null}
 
-          <ol className="home-stepper" aria-label={t(language, "homeYourProfile")}>
-            {FUNNEL_STEPS.map((key, index) => {
-              const done = index < currentStep;
-              const current = index === currentStep && currentStep < 5;
-              return (
-                <li
-                  key={key}
-                  className={`home-stepper__item${done ? " is-done" : ""}${current ? " is-current" : ""}`}
-                >
-                  <span className="home-stepper__dot" aria-hidden>
-                    {done ? "✓" : current ? <span className="home-stepper__pip" /> : null}
-                  </span>
-                  <span className="home-stepper__label">{t(language, key)}</span>
-                </li>
-              );
-            })}
-          </ol>
-
-          {needsProfile ? (
-            <Link to="/profile" className="btn btn--block btn--dark home-funnel__cta">
-              {t(language, "homeFillCta")}
-            </Link>
-          ) : null}
-
-          {isRejected ? (
-            <Link to="/profile" className="btn btn--block btn--dark home-funnel__cta">
-              {t(language, "homeFunnelFixCta")}
-            </Link>
-          ) : null}
-
-          {awaitingPay ? (
-            <button
-              type="button"
-              className="btn btn--block btn--dark home-funnel__cta"
-              disabled={payBusy}
-              onClick={() => void onPay()}
-            >
-              {rub > 0
-                ? tf(language, "homeFunnelPayCtaRub", { rub: rub.toLocaleString("ru-RU"), stars })
-                : tf(language, "homeFunnelPayCta", { stars })}
-            </button>
-          ) : null}
-
-          {isQueued ? (
-            <BoostTopCta
-              language={language}
-              verified={me?.verification_status === "verified"}
-              isTop={Boolean(me?.is_top)}
-              topUntil={me?.top_until}
-              starsOnly={language === "it"}
-              className="home-funnel__boost"
-            />
-          ) : null}
-
-          {payMsg ? <p className="home-funnel__hint">{payMsg}</p> : null}
-        </article>
-      )}
+        {payMsg ? <p className="home-funnel__hint">{payMsg}</p> : null}
+      </article>
 
       <AddToHomeCard language={language} />
 
@@ -270,6 +264,11 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
         <Link to="/catalog" className="home-card home-card--wide">
           <img className="home-card__bg" src={homeAssets.catalog} alt="" />
           <div className="home-card__veil" />
+          {newToday > 0 ? (
+            <span className="home-count-badge">
+              {tf(language, "homeBadgeNewToday", { n: newToday })}
+            </span>
+          ) : null}
           <div className="home-card__body">
             <h3 className="home-card__title">
               {t(language, "homeMembersLead")} <em>Dreamers</em>
@@ -322,8 +321,21 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
           <img className="home-card__bg" src={homeAssets.credits} alt="" />
           <div className="home-card__veil" />
           <div className="home-card__body">
-            <h3 className="home-card__title">{t(language, "homeCredits")}</h3>
-            <p className="home-card__hint">{tf(language, "homeCreditsHint", { n: credits })}</p>
+            <h3 className="home-card__title">{t(language, "homeSubTitle")}</h3>
+            <p className="home-card__hint">
+              {me?.has_unlimited
+                ? tf(language, "homeSubActiveHint", {
+                    date: me.unlimited_until
+                      ? new Date(me.unlimited_until).toLocaleDateString(
+                          language === "it" ? "it-IT" : "ru-RU",
+                          { day: "numeric", month: "short" },
+                        )
+                      : "—",
+                  })
+                : (me?.unread_locked_count ?? 0) > 0
+                  ? tf(language, "homeSubLockedHint", { n: me?.unread_locked_count ?? 0 })
+                  : t(language, "homeSubNoneHint")}
+            </p>
           </div>
         </Link>
       </div>

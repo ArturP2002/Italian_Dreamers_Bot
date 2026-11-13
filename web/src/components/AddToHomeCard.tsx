@@ -3,6 +3,8 @@ import { type Language, t } from "../i18n/messages";
 
 type Props = { language: Language };
 
+const DISMISS_KEY = "id_add_home_dismissed";
+
 /**
  * Standalone home card between funnel/boost and «Участники».
  * Click → Telegram.WebApp.addToHomeScreen().
@@ -11,17 +13,27 @@ export function AddToHomeCard({ language }: Props) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
+    if (localStorage.getItem(DISMISS_KEY) === "1") return;
+
     const tg = window.Telegram?.WebApp;
-    if (!tg?.checkHomeScreenStatus || !tg.addToHomeScreen) return;
+    if (!tg?.checkHomeScreenStatus || !tg.addToHomeScreen) {
+      // Outside Telegram / API unavailable — still show until dismissed.
+      setVisible(true);
+      return;
+    }
+
     let cancelled = false;
     try {
       tg.checkHomeScreenStatus((status) => {
         if (!cancelled) setVisible(status === "missed" || status === "unknown");
       });
     } catch {
-      /* unavailable */
+      if (!cancelled) setVisible(true);
     }
-    const onAdded = () => setVisible(false);
+    const onAdded = () => {
+      localStorage.setItem(DISMISS_KEY, "1");
+      setVisible(false);
+    };
     tg.onEvent?.("homeScreenAdded", onAdded);
     return () => {
       cancelled = true;
@@ -53,8 +65,10 @@ export function AddToHomeCard({ language }: Props) {
           try {
             window.Telegram?.WebApp?.addToHomeScreen?.();
           } catch {
-            setVisible(false);
+            /* ignore */
           }
+          localStorage.setItem(DISMISS_KEY, "1");
+          setVisible(false);
         }}
       >
         {t(language, "addToHomeCta")}

@@ -623,16 +623,16 @@ async def create_unlimited_payment(
 async def send_unlimited_invoice(settings: Settings, *, user: User, payment: Payment) -> None:
     lang = user.language_code if user.language_code in {"ru", "it"} else "ru"
     if lang == "it":
-        title = "Abbonamento illimitato"
+        title = "Dreamers Plus"
         description = (
-            "30 giorni: lettere, pubblicazione e cima del catalogo. "
-            "La pubblicità resta a parte. Rinnovo automatico Stars."
+            "30 giorni: lettere illimitate, profilo in «Partecipanti», cima del catalogo. "
+            "Rinnovo automatico Stelle Telegram."
         )
     else:
-        title = "Безлимит 30 дней"
+        title = "Dreamers Plus"
         description = (
-            "Письма, публикация и топ каталога на 30 дней. "
-            "Реклама отдельно. Автопродление Telegram Stars."
+            "30 дней: письма без лимита, анкета в «Участниках», топ каталога. "
+            "Автопродление Telegram Stars."
         )
     await send_invoice_stars(
         settings,
@@ -737,20 +737,55 @@ async def complete_unlimited_payment(
     until = sub.expires_at.astimezone(timezone.utc).strftime("%d.%m.%Y")
     if lang == "it":
         text = (
-            "✅ Abbonamento illimitato attivo fino al "
-            f"<b>{until}</b>.\nLettere, pubblicazione e cima del catalogo sono inclusi."
+            "✅ <b>Dreamers Plus</b> attivo fino al "
+            f"<b>{until}</b>.\nLettere senza limite e profilo tra gli Iscritti."
         )
     else:
         text = (
-            "✅ Безлимит активен до "
-            f"<b>{until}</b>.\nПисьма, публикация и топ каталога включены."
+            "✅ <b>Dreamers Plus</b> активен до "
+            f"<b>{until}</b>.\nПисьма без лимита и анкета в Участниках."
         )
     await send_message(settings, user.telegram_id, text)
 
     profile_result = await session.execute(select(Profile).where(Profile.user_id == user.id))
     profile = profile_result.scalar_one_or_none()
-    if profile is not None and profile.status == ProfileStatus.AWAITING_PAYMENT.value:
-        await queue_profile_after_entitlement(session, settings, profile=profile, user=user)
+    if profile is not None:
+        if profile.status == ProfileStatus.AWAITING_PAYMENT.value:
+            await queue_profile_after_entitlement(session, settings, profile=profile, user=user)
+        elif profile.status in {
+            ProfileStatus.DRAFT.value,
+            ProfileStatus.REJECTED.value,
+        }:
+            # First Plus payment = registration: send draft to moderation.
+            from app.services.profiles import validate_for_submit
+
+            errors = validate_for_submit(profile)
+            # Mini-anketa may be incomplete — still submit if name+age+photo present.
+            has_mini = bool(
+                (profile.name or "").strip()
+                and profile.age
+                and profile.age >= 18
+                and (profile.photos or [])
+            )
+            if has_mini or not errors:
+                profile.status = ProfileStatus.NEW.value
+                profile.moderation_feedback = None
+                session.add(profile)
+                await session.commit()
+                try:
+                    from app.services.notify import notify_admins_profile_submitted
+
+                    await notify_admins_profile_submitted(settings, profile=profile, user=user)
+                except Exception:
+                    pass
+
+    try:
+        from app.services.referrals import reward_referrer_on_plus
+
+        await reward_referrer_on_plus(session, settings, payer=user)
+        await session.commit()
+    except Exception:
+        pass
     return sub
 
 
