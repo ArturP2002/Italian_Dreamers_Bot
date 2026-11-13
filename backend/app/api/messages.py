@@ -382,6 +382,9 @@ async def get_inbox(
         is_incoming = bool(mr.profile and mr.profile.user_id == auth.user.id)
         if is_incoming and mr.hidden_by_recipient:
             continue
+        # Rejected («не интересно») не висят во входящих.
+        if is_incoming and mr.status == MessageRequestStatus.REJECTED.value:
+            continue
         if not is_incoming and mr.hidden_by_sender:
             continue
         visible.append(mr)

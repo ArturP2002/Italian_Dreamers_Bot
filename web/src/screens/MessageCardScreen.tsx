@@ -4,6 +4,7 @@ import { type Language, t, tf } from "../i18n/messages";
 import {
   fetchMessage,
   fileComplaint,
+  hideMessage,
   mediaUrl,
   rejectMessage,
   replyMessage,
@@ -53,14 +54,24 @@ export function MessageCardScreen({ language, onCreditsChange }: Props) {
     ? item.reply_text
     : item.reply_text_translated || item.reply_text;
 
-  const onReject = async () => {
+  const onNotInterested = async () => {
     setBusy(true);
     setError(null);
     try {
-      await rejectMessage(item.id);
+      // Pending → reject (+ hide on backend). Closed/expired → just hide from inbox.
+      if (item.can_reject) {
+        await rejectMessage(item.id);
+      } else {
+        await hideMessage(item.id);
+      }
       navigate("/inbox", { replace: true });
     } catch {
-      setError(t(language, "errorGeneric"));
+      try {
+        await hideMessage(item.id);
+        navigate("/inbox", { replace: true });
+      } catch {
+        setError(t(language, "errorGeneric"));
+      }
     } finally {
       setBusy(false);
     }
@@ -235,7 +246,21 @@ export function MessageCardScreen({ language, onCreditsChange }: Props) {
               type="button"
               className="btn btn--block btn--ghost"
               disabled={busy}
-              onClick={() => void onReject()}
+              onClick={() => void onNotInterested()}
+            >
+              {t(language, "notInterested")}
+            </button>
+          </div>
+        ) : null}
+
+        {/* Closed / no-reply: still allow «Не интересно» = hide from inbox */}
+        {isIncoming && !item.can_reply && !item.can_chat && !item.content_locked ? (
+          <div className="letter-card__actions">
+            <button
+              type="button"
+              className="btn btn--block btn--ghost"
+              disabled={busy}
+              onClick={() => void onNotInterested()}
             >
               {t(language, "notInterested")}
             </button>

@@ -12,7 +12,11 @@ import {
 } from "../lib/api";
 import { openStarsInvoice } from "../lib/telegramPay";
 
-type Props = { language: Language; onCreditsChange?: () => void };
+type Props = {
+  language: Language;
+  me?: MeUser | null;
+  onCreditsChange?: () => void;
+};
 
 type PayMethod = "rub" | "stars";
 
@@ -28,9 +32,10 @@ function formatDate(iso: string | null | undefined, language: Language): string 
   }
 }
 
-export function CreditsScreen({ language, onCreditsChange }: Props) {
+export function CreditsScreen({ language, me: meProp = null, onCreditsChange }: Props) {
   const starsOnly = language === "it";
-  const [me, setMe] = useState<MeUser | null>(null);
+  // Seed from App so Plus users don't flash the price buttons before /me returns.
+  const [me, setMe] = useState<MeUser | null>(meProp);
   const [config, setConfig] = useState<PublicConfig | null>(null);
   const [busy, setBusy] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
@@ -44,22 +49,29 @@ export function CreditsScreen({ language, onCreditsChange }: Props) {
   };
 
   useEffect(() => {
+    if (meProp) setMe(meProp);
+  }, [meProp]);
+
+  useEffect(() => {
     void reload();
     void fetchConfig().then(setConfig);
   }, []);
 
   const plusStars = config?.prices.unlimited_sub_stars;
   const plusRub = config?.prices.unlimited_sub_rub;
+  const ready = me != null;
   const hasPlus = Boolean(me?.has_unlimited);
   const canceled = Boolean(me?.subscription_canceled);
   const plusUntil = formatDate(me?.unlimited_until, language);
   const locked = me?.unread_locked_count ?? 0;
 
-  const state: "active" | "expired" | "none" = hasPlus
-    ? "active"
-    : me?.unlimited_until
-      ? "expired"
-      : "none";
+  const state: "loading" | "active" | "expired" | "none" = !ready
+    ? "loading"
+    : hasPlus
+      ? "active"
+      : me?.unlimited_until
+        ? "expired"
+        : "none";
 
   const onBuy = async () => {
     setBusy(true);
@@ -129,7 +141,14 @@ export function CreditsScreen({ language, onCreditsChange }: Props) {
         <div className="balance-hero__veil" />
         <div className="balance-hero__body">
           <p className="balance-hero__eyebrow">{t(language, "subEyebrow")}</p>
-          {state === "active" ? (
+          {state === "loading" ? (
+            <>
+              <h1 className="balance-hero__title">
+                Dreamers <span aria-hidden>✨</span> Plus
+              </h1>
+              <p className="balance-hero__sub">…</p>
+            </>
+          ) : state === "active" ? (
             <>
               <h1 className="balance-hero__title">
                 Dreamers <span aria-hidden>✨</span> Plus
@@ -154,7 +173,7 @@ export function CreditsScreen({ language, onCreditsChange }: Props) {
         </div>
       </article>
 
-      {locked > 0 && !hasPlus ? (
+      {ready && locked > 0 && !hasPlus ? (
         <p className="home-meta">{tf(language, "subLockedIncoming", { n: locked })}</p>
       ) : null}
 
@@ -180,7 +199,9 @@ export function CreditsScreen({ language, onCreditsChange }: Props) {
           </strong>
           <span>{t(language, "balancePlusLabel")}</span>
         </p>
-        {hasPlus && !canceled ? (
+        {!ready ? (
+          <p className="balance-pack__connected">…</p>
+        ) : hasPlus && !canceled ? (
           <p className="balance-pack__connected">
             {tf(language, "balancePlusConnected", { date: plusUntil })}
           </p>

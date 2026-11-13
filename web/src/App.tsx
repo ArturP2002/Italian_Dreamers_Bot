@@ -265,7 +265,13 @@ export default function App() {
         <Route path="/chat/:id" element={<ChatScreen language={language} me={me} />} />
         <Route
           path="/credits"
-          element={<CreditsScreen language={language} onCreditsChange={() => void refreshMe()} />}
+          element={
+            <CreditsScreen
+              language={language}
+              me={me}
+              onCreditsChange={() => void refreshMe()}
+            />
+          }
         />
         <Route path="/referral" element={<ReferralScreen language={language} />} />
         <Route path="/newcomers" element={<NewcomersScreen language={language} />} />

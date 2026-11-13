@@ -375,6 +375,8 @@ async def reject_message_request(
     refunded = await refund_held_credit(session, mr=mr, note="letter_rejected_refund")
     mr.status = MessageRequestStatus.REJECTED.value
     mr.responded_at = datetime.now(timezone.utc)
+    # «Не интересно» = убрать из входящих у получателя (как скрытое / удалённое).
+    mr.hidden_by_recipient = True
     session.add(mr)
     await session.commit()
     mr = await get_message_request(session, mr.id)
