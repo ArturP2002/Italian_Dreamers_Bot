@@ -4722,52 +4722,71 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  margin: 10px 0 14px;
-  padding: 12px 12px 12px 12px;
-  border: 1px solid #e6e0d6;
-  border-radius: 16px;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 14px;
+  padding: 14px 14px 14px 12px;
+  border: 0;
+  border-radius: 18px;
   background: #fcfaf8;
+  box-shadow: 0 1px 0 rgba(26, 21, 17, 0.06);
 }
 
 .add-home-card__icon {
-  flex: 0 0 42px;
-  width: 42px;
-  height: 42px;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
+  overflow: hidden;
   border-radius: 12px;
   background: #fff;
-  box-shadow: inset 0 0 0 1px #ebe4da;
+  box-shadow: 0 0 0 1px rgba(26, 21, 17, 0.06);
+}
+
+.add-home-card__icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .add-home-card__text {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   min-width: 0;
+}
+
+.add-home-card__title {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: #191511;
+  letter-spacing: -0.01em;
+}
+
+.add-home-card__hint {
   font-size: 12px;
   line-height: 1.3;
   color: #7e7878;
 }
 
-.add-home-card__text strong {
-  font-size: 13.5px;
-  font-weight: 700;
-  color: #191511;
-  letter-spacing: -0.01em;
-}
-
 .add-home-card__btn {
   flex: none;
-  padding: 10px 16px;
+  align-self: center;
+  padding: 11px 18px;
   border: 0;
   border-radius: 999px;
   background: #191511;
   color: #fff;
-  font: inherit;
-  font-size: 13px;
+  font-family: var(--font-ui);
+  font-size: 14px;
   font-weight: 700;
+  line-height: 1;
   cursor: pointer;
   white-space: nowrap;
 }

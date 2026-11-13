@@ -199,7 +199,6 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
             topUntil={me?.top_until}
             starsOnly={language === "it"}
           />
-          <AddToHomeCard language={language} />
         </div>
       ) : (
         <article className="home-funnel">
@@ -262,9 +261,10 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
           ) : null}
 
           {payMsg ? <p className="home-funnel__hint">{payMsg}</p> : null}
-          <AddToHomeCard language={language} />
         </article>
       )}
+
+      <AddToHomeCard language={language} />
 
       <div className="home-mosaic">
         <Link to="/catalog" className="home-card home-card--wide">
