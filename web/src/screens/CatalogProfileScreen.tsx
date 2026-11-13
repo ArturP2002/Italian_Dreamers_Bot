@@ -1,13 +1,21 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { LikeHeart, MatchBanner } from "../components/LikeHeart";
 import { PhotoLightbox } from "../components/PhotoLightbox";
 import { type Language, t } from "../i18n/messages";
-import { fetchCatalogProfile, mediaUrl, toggleCatalogLike, type CatalogProfile } from "../lib/api";
+import {
+  fetchCatalogProfile,
+  mediaUrl,
+  toggleCatalogLike,
+  type CatalogProfile,
+  type MeUser,
+} from "../lib/api";
 
-type Props = { language: Language };
+type Props = { language: Language; me?: MeUser | null };
 
-export function CatalogProfileScreen({ language }: Props) {
+export function CatalogProfileScreen({ language, me = null }: Props) {
+  const navigate = useNavigate();
+  const guest = me?.is_registered === false;
   const { id } = useParams();
   const profileId = Number(id);
   const [profile, setProfile] = useState<CatalogProfile | null>(null);
@@ -48,16 +56,22 @@ export function CatalogProfileScreen({ language }: Props) {
             >
               <img src={mediaUrl(url)} alt="" />
             </button>
-            {index === 0 && !profile.is_mine ? (
+            {index === 0 && !profile.is_mine && !guest ? (
               <LikeHeart
                 liked={profile.liked}
                 matched={profile.matched}
                 className="like-heart--on-photo"
                 aria-label={t(language, "catalogLike")}
                 onClick={() => {
-                  void toggleCatalogLike(profile.id).then((res) => {
-                    setProfile({ ...profile, liked: res.liked, matched: res.matched });
-                  });
+                  void toggleCatalogLike(profile.id)
+                    .then((res) => {
+                      setProfile({ ...profile, liked: res.liked, matched: res.matched });
+                    })
+                    .catch((e: unknown) => {
+                      if (e instanceof Error && e.message.includes("registration_required")) {
+                        navigate("/profile");
+                      }
+                    });
                 }}
               />
             ) : null}
@@ -91,14 +105,20 @@ export function CatalogProfileScreen({ language }: Props) {
       <p className="work-body">{profile.desired_partner}</p>
 
       <div className="catalog-detail-actions">
-        {!profile.is_mine && !profile.matched ? (
+        {!profile.is_mine && !profile.matched && !guest ? (
           <button
             type="button"
             className={`btn btn--block ${profile.liked ? "btn--champagne" : "btn--outline"}`}
             onClick={() => {
-              void toggleCatalogLike(profile.id).then((res) => {
-                setProfile({ ...profile, liked: res.liked, matched: res.matched });
-              });
+              void toggleCatalogLike(profile.id)
+                .then((res) => {
+                  setProfile({ ...profile, liked: res.liked, matched: res.matched });
+                })
+                .catch((e: unknown) => {
+                  if (e instanceof Error && e.message.includes("registration_required")) {
+                    navigate("/profile");
+                  }
+                });
             }}
           >
             {profile.liked ? t(language, "catalogLiked") : t(language, "catalogLike")}

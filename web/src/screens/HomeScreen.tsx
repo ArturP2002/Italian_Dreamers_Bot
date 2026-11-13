@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { homeAssets } from "../assets/backgrounds";
+import { AddToHomeCard } from "../components/AddToHomeCard";
 import { BoostTopCta } from "../components/BoostTopCta";
 import { TricolorHeart } from "../components/TricolorHeart";
 import { LanguageToggle } from "../components/LanguageToggle";
@@ -94,10 +95,14 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
     void fetchInbox().then((data) => {
       setPendingLetters(data?.pending_incoming ?? 0);
     });
+    if (me?.is_registered === false) {
+      setLikesReceived(0);
+      return;
+    }
     void fetchLikes("received").then((data) => {
       setLikesReceived(data.items?.length ?? 0);
     });
-  }, [me?.id]);
+  }, [me?.id, me?.is_registered]);
 
   useEffect(() => {
     void fetchConfig().then((cfg) => {
@@ -194,6 +199,7 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
             topUntil={me?.top_until}
             starsOnly={language === "it"}
           />
+          <AddToHomeCard language={language} />
         </div>
       ) : (
         <article className="home-funnel">
@@ -256,6 +262,7 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
           ) : null}
 
           {payMsg ? <p className="home-funnel__hint">{payMsg}</p> : null}
+          <AddToHomeCard language={language} />
         </article>
       )}
 
@@ -283,10 +290,10 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
           </div>
         </Link>
 
-        <Link to="/likes" className="home-card">
+        <Link to={me?.is_registered === false ? "/profile" : "/likes"} className="home-card">
           <img className="home-card__bg" src={homeAssets.likes} alt="" />
           <div className="home-card__veil" />
-          {likesReceived > 0 ? (
+          {likesReceived > 0 && me?.is_registered !== false ? (
             <span className="home-count-badge">{tf(language, "homeBadgeNew", { n: likesReceived })}</span>
           ) : null}
           <div className="home-card__body">

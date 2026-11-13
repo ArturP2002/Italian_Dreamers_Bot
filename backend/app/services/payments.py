@@ -261,6 +261,12 @@ async def complete_publish_payment(
 
     user_result = await session.execute(select(User).where(User.id == payment.user_id))
     user = user_result.scalar_one()
+    from app.services.registration import grant_registration_bonus
+
+    await grant_registration_bonus(session, user)
+    await session.commit()
+    await session.refresh(user)
+
     if slot is not None and profile.scheduled_at is not None:
         await notify_user_scheduled(
             settings, user=user, profile=profile, scheduled_at=profile.scheduled_at

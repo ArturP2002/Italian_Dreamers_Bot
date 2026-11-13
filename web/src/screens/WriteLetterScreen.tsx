@@ -1,35 +1,68 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { type Language, t, tf } from "../i18n/messages";
 import {
   createLetter,
   fetchWriteTarget,
   mediaUrl,
+  type MeUser,
   type WriteTarget,
 } from "../lib/api";
-import { ensureWriteAccess } from "../lib/writeAccess";
+import { giftBannerKey } from "../lib/writePath";
 
-type Props = { language: Language };
+type Props = {
+  language: Language;
+  me: MeUser | null;
+  onCreditsChange?: () => void;
+};
 
-export function WriteLetterScreen({ language }: Props) {
+function GiftIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="3.5" y="8.5" width="17" height="4" rx="1" />
+      <path d="M5 12.5V20h14v-7.5M12 8.5V20" />
+      <path d="M12 8.5C10.5 8.5 8 8 8 6a2 2 0 0 1 4 0c0 1 0 2.5 0 2.5Zm0 0c1.5 0 4-.5 4-2.5a2 2 0 0 0-4 0" />
+    </svg>
+  );
+}
+
+function CameraIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M4 8.5h3l1.5-2h7L17 8.5h3a1 1 0 0 1 1 1V18a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5a1 1 0 0 1 1-1Z" />
+      <circle cx="12" cy="13.5" r="3.5" />
+    </svg>
+  );
+}
+
+export function WriteLetterScreen({ language, me, onCreditsChange }: Props) {
   const { profileId } = useParams();
   const navigate = useNavigate();
   const id = Number(profileId);
+  const fileRef = useRef<HTMLInputElement | null>(null);
   const [target, setTarget] = useState<WriteTarget | null>(null);
   const [name, setName] = useState("");
   const [age, setAge] = useState("");
   const [text, setText] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
-  const [photoIsMine, setPhotoIsMine] = useState(false);
+  const [adult, setAdult] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
   useEffect(() => {
     if (!Number.isFinite(id)) return;
     void fetchWriteTarget(id).then(setTarget);
   }, [id]);
+
+  const sender = target?.sender ?? null;
+
+  // Repeat senders: the «about me» row comes prefilled (backend keeps the saved identity).
+  useEffect(() => {
+    if (!sender) return;
+    setName((prev) => prev || sender.name);
+    setAge((prev) => prev || String(sender.age));
+  }, [sender]);
 
   useEffect(() => {
     if (!photo) {
@@ -41,8 +74,10 @@ export function WriteLetterScreen({ language }: Props) {
     return () => URL.revokeObjectURL(url);
   }, [photo]);
 
-  const sender = target?.sender ?? null;
-  const senderPhoto = photoPreview ?? (sender?.photo_url ? mediaUrl(sender.photo_url) : null);
+  const savedPhoto = sender?.photo_url ? mediaUrl(sender.photo_url) : null;
+  const circlePhoto = photoPreview ?? savedPhoto;
+  const hasPhoto = Boolean(photo) || Boolean(sender?.photo_url);
+  const giftLeft = me?.gift_credits_left ?? 0;
 
   const confirmAgeMismatch = (message: string) =>
     new Promise<boolean>((resolve) => {
@@ -57,7 +92,7 @@ export function WriteLetterScreen({ language }: Props) {
                 { id: "cancel", type: "default", text: t(language, "writeCancel") },
               ],
             },
-            (id) => resolve(id === "write"),
+            (btn) => resolve(btn === "write"),
           );
           return;
         }
@@ -67,30 +102,35 @@ export function WriteLetterScreen({ language }: Props) {
       resolve(window.confirm(message));
     });
 
+  const onPickPhoto = (file: File | null) => {
+    setPhoto(file);
+    // A stale «no person / group photo» error must not outlive the photo it was about.
+    setError(null);
+  };
+
   const onSubmit = async () => {
     setError(null);
     const ageNum = Number(age);
     if (!sender) {
       if (!name.trim()) {
-        setError(t(language, "fieldRequired"));
+        setError(t(language, "writeNameInvalid"));
         return;
       }
-      if (!Number.isFinite(ageNum) || ageNum < 18) {
-        setError(t(language, "writeAgeWarn"));
+      if (!Number.isFinite(ageNum) || ageNum < 18 || ageNum > 99) {
+        setError(t(language, "writeAgeInvalid"));
         return;
       }
     }
-    if (text.trim().length < 10) {
-      setError(t(language, "fieldRequired"));
-      return;
-    }
-    const hasExistingPhoto = Boolean(sender?.photo_url);
-    if (!hasExistingPhoto && !photo) {
+    if (!hasPhoto) {
       setError(t(language, "writePhotoRequired"));
       return;
     }
-    if (photo && !photoIsMine) {
-      setError(t(language, "writePhotoMine"));
+    if (!adult) {
+      setError(t(language, "writeAdultRequired"));
+      return;
+    }
+    if (!text.trim()) {
+      setError(t(language, "fieldRequired"));
       return;
     }
     if (target) {
@@ -102,21 +142,18 @@ export function WriteLetterScreen({ language }: Props) {
     }
     setBusy(true);
     try {
-      // Native Telegram dialog inside Mini App — do not open t.me (that drops the letter).
-      const granted = await ensureWriteAccess();
       const created = await createLetter({
         profileId: id,
         text: text.trim(),
         senderName: sender ? undefined : name.trim(),
         senderAge: sender ? undefined : ageNum,
         photo,
-        photoIsMine: photoIsMine || !photo,
+        // The helper line under the photo is the confirmation: «only you, face visible».
+        photoIsMine: true,
       });
-      if (!granted) {
-        const tg = window.Telegram?.WebApp;
-        if (tg?.showAlert) tg.showAlert(t(language, "writeAccessDenied"));
-      }
-      navigate(`/inbox/${created.id}`, { replace: true });
+      onCreditsChange?.();
+      // requestWriteAccess is asked on the waiting screen, not here.
+      navigate(`/inbox/${created.id}/sent`, { replace: true });
     } catch (e) {
       const raw = e instanceof Error ? e.message : "";
       let code = "";
@@ -129,17 +166,22 @@ export function WriteLetterScreen({ language }: Props) {
         /* plain text / substring fallback */
       }
       if (!code) {
-        if (raw.includes("duplicate")) code = "duplicate";
-        else if (raw.includes("contact_forbidden")) code = "contact_forbidden";
-        else if (raw.includes("soft_banned")) code = "soft_banned";
-        else if (raw.includes("pending_limit")) code = "pending_limit";
-        else if (raw.includes("rate_hour")) code = "rate_hour";
-        else if (raw.includes("rate_day")) code = "rate_day";
-        else if (raw.includes("photo_required")) code = "photo_required";
-        else if (raw.includes("photo_not_confirmed")) code = "photo_not_confirmed";
-        else if (raw.includes("no_person")) code = "no_person";
-        else if (raw.includes("group_photo")) code = "group_photo";
-        else if (raw.includes("no_credits") || raw.includes("402")) code = "no_credits";
+        const known = [
+          "duplicate",
+          "contact_forbidden",
+          "soft_banned",
+          "pending_limit",
+          "rate_hour",
+          "rate_day",
+          "photo_required",
+          "photo_not_confirmed",
+          "no_person",
+          "group_photo",
+          "name_invalid",
+          "age_invalid",
+        ];
+        code = known.find((k) => raw.includes(k)) ?? "";
+        if (!code && (raw.includes("no_credits") || raw.includes("402"))) code = "no_credits";
       }
 
       const textByCode: Record<string, string> = {
@@ -150,9 +192,11 @@ export function WriteLetterScreen({ language }: Props) {
         rate_hour: t(language, "letterRateHour"),
         rate_day: t(language, "letterRateDay"),
         photo_required: t(language, "writePhotoRequired"),
-        photo_not_confirmed: t(language, "writePhotoMine"),
-        no_person: t(language, "writeNoPerson"),
-        group_photo: t(language, "photoGroupRejected"),
+        photo_not_confirmed: t(language, "writeOnlyYou"),
+        no_person: t(language, "writeOnlyYou"),
+        group_photo: t(language, "writeOnlyYou"),
+        name_invalid: t(language, "writeNameInvalid"),
+        age_invalid: t(language, "writeAgeInvalid"),
         no_credits: t(language, "writeNeedCredit"),
       };
       const message = textByCode[code] ?? t(language, "errorGeneric");
@@ -168,7 +212,7 @@ export function WriteLetterScreen({ language }: Props) {
   if (!target) {
     return (
       <section className="screen screen--milky">
-        <Link to="/" className="work-back">
+        <Link to="/" className="work-back work-back--gold">
           ← {t(language, "backHome")}
         </Link>
         <p className="home-meta">{t(language, "saving")}</p>
@@ -177,92 +221,116 @@ export function WriteLetterScreen({ language }: Props) {
   }
 
   return (
-    <section className="screen screen--milky">
-      <Link to="/" className="work-back">
+    <section className="screen screen--milky write-screen">
+      <Link to="/" className="work-back work-back--gold">
         ← {t(language, "backHome")}
       </Link>
-      <h1 className="work-title">{t(language, "writeTitle")}</h1>
-      <p className="work-body">{tf(language, "letterTo", { name: target.name })}</p>
-      <p className="home-meta">{t(language, "writeHint")}</p>
-      <p className="home-meta">{t(language, "writePushHintShort")}</p>
 
-      <div className="write-target">
-        {target.photo_url ? (
-          <img src={mediaUrl(target.photo_url)} alt="" className="write-target__photo" />
-        ) : null}
-        <div>
-          <strong>
+      <div className="write-recipient">
+        <div className="write-recipient__photo">
+          {target.photo_url ? <img src={mediaUrl(target.photo_url)} alt="" /> : null}
+        </div>
+        <div className="write-recipient__info">
+          <p className="write-recipient__eyebrow">{t(language, "writeMessageFor")}</p>
+          <h1 className="write-recipient__name">
             {target.name}, {target.age}
-          </strong>
-          <p>{target.city}</p>
+          </h1>
+          <p className="write-recipient__meta">{target.city}</p>
+          <p className="write-recipient__meta">
+            {tf(language, "seekingAges", { min: target.age_min, max: target.age_max })}
+          </p>
+          {target.verified ? (
+            <span className="pill pill--green">{t(language, "profileVerifiedPill")}</span>
+          ) : null}
         </div>
       </div>
 
-      {sender ? (
-        <>
-          <label className="wizard-hint">{t(language, "writeFrom")}</label>
-          <div className="write-target write-target--sender">
-            {senderPhoto ? <img src={senderPhoto} alt="" className="write-target__photo" /> : null}
-            <div>
-              <strong>
-                {sender.name}, {sender.age}
-              </strong>
-              {sender.city ? <p>{sender.city}</p> : null}
-              <p className="write-target__note">
-                {t(language, sender.source === "profile" ? "writeFromProfile" : "writeFromSaved")}
-              </p>
-            </div>
-          </div>
-        </>
-      ) : (
-        <>
-          <label className="wizard-hint">{t(language, "writeName")}</label>
-          <div className="field">
-            <input value={name} maxLength={20} onChange={(e) => setName(e.target.value)} />
-          </div>
-
-          <label className="wizard-hint">{t(language, "writeAge")}</label>
-          <div className="field">
-            <input
-              type="number"
-              min={18}
-              max={99}
-              value={age}
-              onChange={(e) => setAge(e.target.value)}
-            />
-          </div>
-        </>
-      )}
-
-      <label className="wizard-hint">{t(language, "writePhoto")}</label>
-      {sender?.photo_url ? <p className="write-target__note">{t(language, "writePhotoOptional")}</p> : null}
-      <div className="field">
-        <input
-          type="file"
-          accept="image/*"
-          onChange={(e) => {
-            setPhoto(e.target.files?.[0] ?? null);
-            setPhotoIsMine(false);
-          }}
-        />
-      </div>
-      {photo ? (
-        <label className="checkbox-row">
-          <input
-            type="checkbox"
-            checked={photoIsMine}
-            onChange={(e) => setPhotoIsMine(e.target.checked)}
-          />
-          <span>{t(language, "writePhotoMine")}</span>
-        </label>
+      {giftLeft > 0 ? (
+        <div className="gift-banner">
+          <span className="gift-banner__icon">
+            <GiftIcon />
+          </span>
+          <span className="gift-banner__text">
+            <strong>{tf(language, giftBannerKey(language, giftLeft), { n: giftLeft })}</strong>
+            <span>{tf(language, "giftBannerSub", { name: target.name })}</span>
+          </span>
+        </div>
       ) : null}
 
-      <label className="wizard-hint">{t(language, "writeText")}</label>
+      <div className="write-about">
+        <button
+          type="button"
+          className={`photo-picker${circlePhoto ? " has-photo" : ""}`}
+          aria-label={t(language, "writePickPhoto")}
+          onClick={() => fileRef.current?.click()}
+        >
+          {circlePhoto ? (
+            <img src={circlePhoto} alt="" />
+          ) : (
+            <span className="photo-picker__icon">
+              <CameraIcon />
+            </span>
+          )}
+          <span className="photo-picker__plus" aria-hidden>
+            +
+          </span>
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={(e) => {
+            onPickPhoto(e.target.files?.[0] ?? null);
+            e.target.value = "";
+          }}
+        />
+        <div className="write-about__fields">
+          <div className="write-field">
+            <label htmlFor="write-name">{t(language, "writeYourName")}</label>
+            <input
+              id="write-name"
+              value={name}
+              maxLength={20}
+              readOnly={Boolean(sender)}
+              onChange={(e) => {
+                setName(e.target.value);
+                setError(null);
+              }}
+            />
+          </div>
+          <div className="write-field write-field--age">
+            <label htmlFor="write-age">{t(language, "writeYourAge")}</label>
+            <input
+              id="write-age"
+              inputMode="numeric"
+              value={age}
+              readOnly={Boolean(sender)}
+              onChange={(e) => {
+                setAge(e.target.value.replace(/\D/g, "").slice(0, 2));
+                setError(null);
+              }}
+            />
+          </div>
+        </div>
+      </div>
+      <p className="write-photo-note">{t(language, "writePhotoNote")}</p>
+
+      <label className="write-adult">
+        <input type="checkbox" checked={adult} onChange={(e) => setAdult(e.target.checked)} />
+        <span>{t(language, "writeAdult")}</span>
+      </label>
+
+      <label className="write-label" htmlFor="write-text">
+        {t(language, "writeMessageLabel")}
+      </label>
       <div className="field">
         <textarea
-          rows={6}
+          id="write-text"
+          rows={5}
           value={text}
           maxLength={1200}
+          placeholder={tf(language, "writeMessagePlaceholder", { name: target.name })}
           onChange={(e) => setText(e.target.value)}
         />
       </div>
@@ -271,12 +339,13 @@ export function WriteLetterScreen({ language }: Props) {
 
       <button
         type="button"
-        className="btn btn--block btn--dark"
+        className="btn btn--block btn--dark btn--pill"
         disabled={busy}
         onClick={() => void onSubmit()}
       >
-        {busy ? t(language, "saving") : t(language, "writeSend")}
+        {busy ? t(language, "saving") : t(language, "writeSendMessage")}
       </button>
+      {!hasPhoto ? <p className="write-photo-hint">{t(language, "writeAddPhotoHint")}</p> : null}
     </section>
   );
 }

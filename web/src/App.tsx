@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { type Language, loadLanguage, saveLanguage } from "./i18n/messages";
 import { claimLegacyInvite, claimReferral, fetchMe, patchLanguage, type MeUser } from "./lib/api";
+import { BottomNav, bottomNavActive } from "./components/BottomNav";
 import { initTelegramFullscreen } from "./lib/telegramViewport";
 import { AdFormScreen } from "./screens/AdFormScreen";
 import { AdminScreen } from "./screens/AdminScreen";
@@ -18,6 +19,7 @@ import { ReferralScreen } from "./screens/ReferralScreen";
 import { SupportScreen } from "./screens/SupportScreen";
 import { LikesScreen } from "./screens/LikesScreen";
 import { VerifyScreen } from "./screens/VerifyScreen";
+import { WaitingSentScreen } from "./screens/WaitingSentScreen";
 import { WriteLetterScreen } from "./screens/WriteLetterScreen";
 
 const BOOT_MIN_MS = 1200;
@@ -52,8 +54,24 @@ function AdminGate({ language, me }: { language: Language; me: MeUser | null }) 
   return <AdminScreen language={language} />;
 }
 
+/** Sympathies need a completed registration: guests go to the profile wizard. */
+function RequireRegistered({ me, children }: { me: MeUser | null; children: ReactNode }) {
+  if (me === null) {
+    return (
+      <section className="screen screen--milky">
+        <p className="home-meta">…</p>
+      </section>
+    );
+  }
+  if (me.is_registered === false) {
+    return <Navigate to="/profile" replace />;
+  }
+  return <>{children}</>;
+}
+
 export default function App() {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const initialLanguageRef = useRef(loadLanguage());
   const [language, setLanguage] = useState<Language | null>(() => initialLanguageRef.current);
   const [me, setMe] = useState<MeUser | null>(null);
@@ -190,29 +208,51 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${bottomNavActive(pathname) ? " app-shell--nav" : ""}`}>
       <Routes>
         <Route
           path="/"
           element={<HomeScreen language={language} me={me} onLanguageChange={handleLanguageChange} />}
         />
         <Route path="/support" element={<SupportScreen language={language} me={me} />} />
-        <Route path="/catalog" element={<CatalogScreen language={language} />} />
-        <Route path="/catalog/:id" element={<CatalogProfileScreen language={language} />} />
-        <Route path="/likes" element={<LikesScreen language={language} />} />
+        <Route path="/catalog" element={<CatalogScreen language={language} me={me} />} />
+        <Route
+          path="/catalog/:id"
+          element={<CatalogProfileScreen language={language} me={me} />}
+        />
+        <Route
+          path="/likes"
+          element={
+            <RequireRegistered me={me}>
+              <LikesScreen language={language} />
+            </RequireRegistered>
+          }
+        />
         <Route
           path="/verify"
           element={<VerifyScreen language={language} onRefresh={() => void refreshMe()} />}
         />
-        <Route path="/inbox" element={<InboxScreen language={language} />} />
+        <Route
+          path="/inbox"
+          element={<InboxScreen language={language} me={me} onMeRefresh={() => void refreshMe()} />}
+        />
         <Route
           path="/inbox/:id"
           element={
             <MessageCardScreen language={language} onCreditsChange={() => void refreshMe()} />
           }
         />
-        <Route path="/write/:profileId" element={<WriteLetterScreen language={language} />} />
-        <Route path="/chat/:id" element={<ChatScreen language={language} />} />
+        <Route
+          path="/inbox/:id/sent"
+          element={<WaitingSentScreen language={language} me={me} onMeRefresh={() => void refreshMe()} />}
+        />
+        <Route
+          path="/write/:profileId"
+          element={
+            <WriteLetterScreen language={language} me={me} onCreditsChange={() => void refreshMe()} />
+          }
+        />
+        <Route path="/chat/:id" element={<ChatScreen language={language} me={me} />} />
         <Route
           path="/credits"
           element={<CreditsScreen language={language} onCreditsChange={() => void refreshMe()} />}
@@ -234,6 +274,7 @@ export default function App() {
         <Route path="/admin/*" element={<AdminGate language={language} me={me} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <BottomNav language={language} />
     </div>
   );
 }

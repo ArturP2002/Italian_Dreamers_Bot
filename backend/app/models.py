@@ -169,6 +169,16 @@ class User(Base):
     stated_photo_file_unique_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     message_credits: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    gift_credits_granted: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    gift_credits_left: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    first_message_free_used: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    registration_bonus_granted: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     is_blocked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     soft_ban_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     telegram_platform: Mapped[str | None] = mapped_column(String(32), nullable=True)
@@ -378,11 +388,20 @@ class MessageRequest(Base):
     unlocked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Plain int to avoid circular FK with payments.related_message_request_id
     charged_payment_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    # True when send spent a credit or used Dreamers Plus (new pay-at-send model).
+    # True when send spent a credit or used Dreamers Plus (hold model).
     paid_at_send: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     # Refundable credits held while waiting for a first reply (1 after paid send, 0 after refund/consume).
     credit_held: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     refunded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    hidden_by_sender: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    hidden_by_recipient: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    sender_telegram_shared_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    recipient_telegram_shared_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    unlock_from_gift: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -665,6 +684,42 @@ class WeeklyReport(Base):
     period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, unique=True)
     payload: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class CatalogProfileView(Base):
+    """Tracks which catalog profiles a guest saw on a given Rome day (15/day gate)."""
+
+    __tablename__ = "catalog_profile_views"
+    __table_args__ = (
+        UniqueConstraint("user_id", "profile_id", "view_date", name="uq_catalog_views_user_profile_day"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    profile_id: Mapped[int] = mapped_column(
+        ForeignKey("profiles.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    view_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class WaitingTeaserPhoto(Base):
+    """Admin-picked 6 photos shown on the post-send waiting screen (by viewer gender)."""
+
+    __tablename__ = "waiting_teaser_photos"
+    __table_args__ = (
+        UniqueConstraint("audience_gender", "position", name="uq_waiting_teaser_gender_pos"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    audience_gender: Mapped[str] = mapped_column(String(16), nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    file_id: Mapped[str] = mapped_column(String(1024), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

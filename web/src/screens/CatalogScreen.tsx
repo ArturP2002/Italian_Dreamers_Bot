@@ -1,14 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { LikeHeart } from "../components/LikeHeart";
 import { type Language, t } from "../i18n/messages";
-import { fetchCatalog, mediaUrl, toggleCatalogLike, type CatalogCard } from "../lib/api";
+import { fetchCatalog, mediaUrl, toggleCatalogLike, type CatalogCard, type MeUser } from "../lib/api";
+import { formatCount } from "../lib/writePath";
 
-type Props = { language: Language };
+type Props = { language: Language; me?: MeUser | null };
 
 type GenderFilter = "all" | "female" | "male";
 
-export function CatalogScreen({ language }: Props) {
+export function CatalogScreen({ language, me = null }: Props) {
+  const navigate = useNavigate();
+  const [isRegistered, setIsRegistered] = useState<boolean>(me?.is_registered !== false);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
+  const [gateReached, setGateReached] = useState(false);
   const [items, setItems] = useState<CatalogCard[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [gender, setGender] = useState<GenderFilter | null>(null);
@@ -45,6 +50,9 @@ export function CatalogScreen({ language }: Props) {
         } else if (g == null) {
           setGender("all");
         }
+        setIsRegistered(page.is_registered !== false);
+        setTotalCount(page.total_count ?? null);
+        setGateReached(Boolean(page.gate_reached));
         setItems((prev) => (reset ? page.items : [...prev, ...page.items]));
         setCursor(page.next_cursor);
       } catch {
@@ -68,8 +76,12 @@ export function CatalogScreen({ language }: Props) {
     void load(true, null, g);
   };
 
+  const guest = !isRegistered;
+  const showGate = guest && (gateReached || items.some((i) => i.blurred));
+  const goCreateProfile = () => navigate("/profile");
+
   return (
-    <section className="screen screen--milky">
+    <section className={`screen screen--milky${showGate ? " screen--with-sheet" : ""}`}>
       <Link to="/" className="work-back">
         ← {t(language, "backHome")}
       </Link>
@@ -136,6 +148,19 @@ export function CatalogScreen({ language }: Props) {
       <div className="catalog-grid">
         {items.map((item) => {
           const cover = item.photo_urls[0];
+          if (item.blurred) {
+            return (
+              <div key={item.id} className="catalog-card catalog-card--blurred" aria-hidden>
+                <div className="catalog-card__media">
+                  {cover ? <img src={mediaUrl(cover)} alt="" /> : <div className="catalog-card__ph" />}
+                </div>
+                <div className="catalog-card__link catalog-card__link--bars">
+                  <i />
+                  <i />
+                </div>
+              </div>
+            );
+          }
           return (
             <div key={item.id} className="catalog-card">
               <div className="catalog-card__media">
@@ -167,21 +192,29 @@ export function CatalogScreen({ language }: Props) {
                     ✓
                   </span>
                 ) : null}
-                <LikeHeart
-                  liked={item.liked}
-                  matched={item.matched}
-                  className="like-heart--card-br"
-                  aria-label={t(language, "catalogLike")}
-                  onClick={() => {
-                    void toggleCatalogLike(item.id).then((res) => {
-                      setItems((prev) =>
-                        prev.map((p) =>
-                          p.id === item.id ? { ...p, liked: res.liked, matched: res.matched } : p,
-                        ),
-                      );
-                    });
-                  }}
-                />
+                {!guest ? (
+                  <LikeHeart
+                    liked={item.liked}
+                    matched={item.matched}
+                    className="like-heart--card-br"
+                    aria-label={t(language, "catalogLike")}
+                    onClick={() => {
+                      void toggleCatalogLike(item.id)
+                        .then((res) => {
+                          setItems((prev) =>
+                            prev.map((p) =>
+                              p.id === item.id ? { ...p, liked: res.liked, matched: res.matched } : p,
+                            ),
+                          );
+                        })
+                        .catch((e: unknown) => {
+                          if (e instanceof Error && e.message.includes("registration_required")) {
+                            goCreateProfile();
+                          }
+                        });
+                    }}
+                  />
+                ) : null}
               </div>
               <Link to={`/catalog/${item.id}`} className="catalog-card__link">
                 <strong>
@@ -201,7 +234,11 @@ export function CatalogScreen({ language }: Props) {
         })}
       </div>
 
-      {items.length === 0 && !busy ? <p className="home-meta">{t(language, "catalogEmpty")}</p> : null}
+      {items.length === 0 && !busy ? (
+        <p className="home-meta">
+          {t(language, guest ? "catalogGateTomorrow" : "catalogEmpty")}
+        </p>
+      ) : null}
 
       {cursor ? (
         <button
@@ -212,6 +249,26 @@ export function CatalogScreen({ language }: Props) {
         >
           {busy ? t(language, "saving") : t(language, "catalogLoadMore")}
         </button>
+      ) : null}
+
+      {showGate ? (
+        <aside className="catalog-gate" role="dialog" aria-label={t(language, "catalogGateTitle")}>
+          <h2 className="catalog-gate__title">{t(language, "catalogGateTitle")}</h2>
+          <p className="catalog-gate__body">
+            <strong>{t(language, "catalogGateBodyA")}</strong>
+            {t(language, "catalogGateBodyB")}
+            <strong>{formatCount(totalCount ?? 0, language)}</strong>
+            {t(language, "catalogGateBodyC")}
+          </p>
+          <button
+            type="button"
+            className="btn btn--plum btn--block btn--pill"
+            onClick={goCreateProfile}
+          >
+            {t(language, "catalogGateCta")}
+          </button>
+          <p className="catalog-gate__foot">{t(language, "catalogGateFoot")}</p>
+        </aside>
       ) : null}
     </section>
   );

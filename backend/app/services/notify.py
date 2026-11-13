@@ -334,35 +334,57 @@ async def notify_initiator_pay_to_unlock(
     initiator: User,
     request: MessageRequest,
 ) -> None:
+    from pathlib import Path
+
+    from app.services.telegram_api import send_photo_file, send_photo_media
+
     lang = initiator.language_code if initiator.language_code in {"ru", "it"} else "ru"
     profile_name = request.profile.name if request.profile else "—"
     gender = request.profile.gender if request.profile else None
     app_url = _app_link(settings, f"inbox_{request.id}")
-    credits = initiator.message_credits
     safe_name = html.escape(profile_name)
+    quote = (request.reply_text or "").strip().replace("\n", " ")
+    if len(quote) > 60:
+        quote = quote[:57].rstrip() + "…"
+    quote_html = html.escape(quote) if quote else ""
     if lang == "it":
-        text = (
-            f"💌 <b>{safe_name}</b> {_replied_verb(lang, gender)}.\n\n"
-            "Il testo è nascosto. Per aprire di nuovo l’incontro usa 1 credito "
-            f"(saldo: <b>{credits}</b>), paga oppure Dreamers Plus."
-        )
-        btn = "Apri incontro"
+        text = f"💌 <b>{safe_name}</b> {_replied_verb(lang, gender)}!"
+        if quote_html:
+            text += f"\n«{quote_html}»"
+        btn = "Apri la risposta"
     else:
-        text = (
-            f"💌 Вам {_replied_verb(lang, gender)} <b>{safe_name}</b>.\n\n"
-            "Текст скрыт. Чтобы открыть знакомство снова — 1 кредит с баланса "
-            f"(сейчас: <b>{credits}</b>), оплата или Dreamers Plus."
-        )
-        btn = "Открыть знакомство"
+        text = f"💌 <b>{safe_name}</b> {_replied_verb(lang, gender)} тебе!"
+        if quote_html:
+            text += f"\n«{quote_html}»"
+        btn = "Открыть ответ"
+    markup = _webapp_button(app_url, btn)
+    photo_source = None
+    if request.profile and request.profile.photos:
+        first = sorted(request.profile.photos, key=lambda p: p.position)[0]
+        fid = first.file_id or ""
+        if fid.startswith("local:"):
+            path = Path(__file__).resolve().parents[2] / "media" / "profiles" / fid.removeprefix("local:")
+            if path.exists():
+                photo_source = path
+        elif fid:
+            photo_source = fid
     try:
-        await send_message(
-            settings,
-            initiator.telegram_id,
-            text,
-            reply_markup=_webapp_button(app_url, btn),
-        )
+        if isinstance(photo_source, Path):
+            await send_photo_file(
+                settings, initiator.telegram_id, photo_source, caption=text, reply_markup=markup
+            )
+        elif isinstance(photo_source, str):
+            await send_photo_media(
+                settings, initiator.telegram_id, photo_source, caption=text, reply_markup=markup
+            )
+        else:
+            await send_message(settings, initiator.telegram_id, text, reply_markup=markup)
     except Exception:
         logger.exception("Failed to notify initiator %s about reply", initiator.telegram_id)
+        try:
+            await send_message(settings, initiator.telegram_id, text, reply_markup=markup)
+        except Exception:
+            logger.exception("Fallback text notify also failed for %s", initiator.telegram_id)
 
 
 async def notify_letter_expired(
@@ -457,79 +479,93 @@ async def notify_parties_unlocked(
     *,
     request: MessageRequest,
 ) -> None:
-    """After credit spend: Mini App chat + Telegram intro to both sides."""
+    """After unlock: Mini App chat link only (Telegram contacts are opt-in)."""
     sender = request.sender
     owner = request.profile.user if request.profile else None
     if not sender or not owner:
         return
 
     chat_url = _app_link(settings, f"chat_{request.id}")
-    owner_uname = (
-        (request.profile.telegram_username if request.profile else None)
-        or owner.telegram_username
-    )
-    sender_uname = sender.telegram_username
-    owner_link = _tg_link(owner_uname)
-    sender_link = _tg_link(sender_uname)
 
-    # Intro to initiator (sender)
     lang_s = sender.language_code if sender.language_code in {"ru", "it"} else "ru"
     if lang_s == "it":
         text_s = (
             f"✅ Chat sbloccata con <b>{request.profile.name}</b>.\n"
-            "Scrivi nell’app (traduzione automatica) "
-            "oppure apri Telegram."
+            "Scrivi nell’app (traduzione automatica)."
         )
         btn_app = "Apri chat"
-        btn_tg = "Apri su Telegram"
     else:
         text_s = (
             f"✅ Чат с <b>{request.profile.name}</b> открыт.\n"
-            "Пишите в Mini App (автоперевод) "
-            "или перейдите в Telegram."
+            "Пишите в Mini App (автоперевод)."
         )
         btn_app = "Открыть чат"
-        btn_tg = "Открыть в Telegram"
     markup_s: dict = {"inline_keyboard": [[{"text": btn_app, "web_app": {"url": chat_url}}]]}
-    if owner_link:
-        markup_s["inline_keyboard"].append([{"text": btn_tg, "url": owner_link}])
     try:
         await send_message(settings, sender.telegram_id, text_s, reply_markup=markup_s)
     except Exception:
         logger.exception("Failed unlock notify to sender %s", sender.telegram_id)
 
-    # Intro to recipient (profile owner)
     lang_o = owner.language_code if owner.language_code in {"ru", "it"} else "ru"
     sender_name = request.sender_name or sender.telegram_first_name or "—"
     if lang_o == "it":
         text_o = (
             f"✅ Chat aperta con <b>{sender_name}</b>.\n"
-            "Continuate nell’app con traduzione automatica "
-            "o su Telegram."
+            "Continuate nell’app con traduzione automatica."
         )
         btn_app_o = "Apri chat"
-        btn_tg_o = "Apri su Telegram"
     else:
         text_o = (
             f"✅ Чат с <b>{sender_name}</b> открыт.\n"
-            "Продолжайте в Mini App с автопереводом "
-            "или в Telegram."
+            "Продолжайте в Mini App с автопереводом."
         )
         btn_app_o = "Открыть чат"
-        btn_tg_o = "Открыть в Telegram"
     markup_o: dict = {"inline_keyboard": [[{"text": btn_app_o, "web_app": {"url": chat_url}}]]}
-    if sender_link:
-        markup_o["inline_keyboard"].append([{"text": btn_tg_o, "url": sender_link}])
     try:
         await send_message(settings, owner.telegram_id, text_o, reply_markup=markup_o)
     except Exception:
         logger.exception("Failed unlock notify to owner %s", owner.telegram_id)
 
-    # Best-effort: ensure bot username resolve doesn't block (unused but warms cache)
+
+async def notify_telegram_shared(
+    settings: Settings,
+    *,
+    request: MessageRequest,
+    sharer: User,
+) -> None:
+    """Peer gets a bot notice that someone shared their Telegram."""
+    sender = request.sender
+    owner = request.profile.user if request.profile else None
+    if not sender or not owner or not request.profile:
+        return
+    peer = owner if sharer.id == sender.id else sender
+    sharer_name = (
+        request.profile.name
+        if sharer.id == owner.id
+        else (request.sender_name or sharer.telegram_first_name or "—")
+    )
+    uname = (sharer.telegram_username or "").strip().lstrip("@")
+    if sharer.id == owner.id:
+        uname = (request.profile.telegram_username or uname or "").strip().lstrip("@")
+    link = _tg_link(uname)
+    chat_url = _app_link(settings, f"chat_{request.id}")
+    lang = peer.language_code if peer.language_code in {"ru", "it"} else "ru"
+    if lang == "it":
+        text = f"💌 <b>{sharer_name}</b> ti ha dato il suo Telegram"
+        btn = f"Scrivi a {sharer_name} su Telegram" if link else "Apri chat"
+    else:
+        text = f"💌 <b>{sharer_name}</b> дал(а) тебе свой Telegram"
+        btn = f"Написать {sharer_name} в Telegram" if link else "Открыть чат"
+    markup: dict = {"inline_keyboard": []}
+    if link:
+        markup["inline_keyboard"].append([{"text": btn, "url": link}])
+    markup["inline_keyboard"].append(
+        [{"text": "Apri chat" if lang == "it" else "Открыть чат", "web_app": {"url": chat_url}}]
+    )
     try:
-        await get_bot_username(settings)
+        await send_message(settings, peer.telegram_id, text, reply_markup=markup)
     except Exception:
-        pass
+        logger.exception("Failed telegram-shared notify to %s", peer.telegram_id)
 
 
 async def notify_admins_ad_submitted(

@@ -5,9 +5,16 @@
   --color-card: #241d17;
   --color-cream: #efe4d2;
   --color-cream-soft: #f3eee5;
-  --color-milky: #f4eee4;
+  --color-milky: #f3eee5;
   --color-champagne: #c8a774;
   --color-secondary: #9c8f80;
+  /* Write-path TZ: «дымчатая слива» actions / gift, gold back link, green confirm */
+  --color-plum: #76616f;
+  --color-back-link: #a8875a;
+  --color-confirm: #427848;
+  --color-confirm-bg: #e4ece2;
+  --color-card-light: #fcfaf8;
+  --color-card-border: #e6e0d6;
 
   /* Headings: Inter Tight Black, ALL CAPS, tracking −1% */
   --font-display: "Inter Tight", "Inter", system-ui, sans-serif;

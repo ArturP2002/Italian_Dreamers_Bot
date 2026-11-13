@@ -15,7 +15,12 @@ async def my_likes(
     auth: AuthContext = Depends(get_auth_context),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
+    from app.services.registration import profile_is_registered
+    from fastapi import HTTPException
+
     own = await get_user_profile(session, auth.user.id)
+    if not profile_is_registered(own):
+        raise HTTPException(status_code=403, detail="registration_required")
     own_id = own.id if own else None
     if kind == "received":
         rows = await list_received_likes(session, auth.user.id)

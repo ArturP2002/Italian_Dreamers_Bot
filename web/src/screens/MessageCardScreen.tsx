@@ -44,7 +44,7 @@ export function MessageCardScreen({ language, onCreditsChange }: Props) {
   if (!item) {
     return (
       <section className="screen screen--milky">
-        <Link to="/inbox" className="work-back">
+        <Link to="/inbox" className="work-back work-back--gold">
           ← {t(language, "back")}
         </Link>
         <p className="home-meta">{t(language, "saving")}</p>
@@ -165,7 +165,7 @@ export function MessageCardScreen({ language, onCreditsChange }: Props) {
 
   return (
     <section className="screen screen--milky">
-      <Link to="/inbox" className="work-back">
+      <Link to="/inbox" className="work-back work-back--gold">
         ← {t(language, "back")}
       </Link>
 
@@ -276,16 +276,20 @@ export function MessageCardScreen({ language, onCreditsChange }: Props) {
               >
                 {t(language, "unlockUnlimited")}
               </button>
-            ) : item.message_credits >= 1 ? (
+            ) : (
               <button
                 type="button"
-                className="btn btn--block btn--dark"
+                className="btn btn--block btn--plum btn--pill"
                 disabled={busy}
                 onClick={() => void onUnlock()}
               >
-                {tf(language, "unlockWithCredit", { n: item.message_credits })}
+                {(item.gift_credits_left ?? 0) > 0
+                  ? tf(language, "unlockWithGift", { n: item.gift_credits_left ?? 0 })
+                  : item.message_credits >= 1
+                    ? tf(language, "unlockWithCredit", { n: item.message_credits })
+                    : t(language, "unlockOpen")}
               </button>
-            ) : null}
+            )}
             {!item.has_unlimited ? (
             <>
             <button

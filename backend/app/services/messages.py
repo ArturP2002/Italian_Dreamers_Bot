@@ -156,8 +156,16 @@ async def _charge_send(
     sender: User,
     mr: MessageRequest,
 ) -> None:
-    """Spend 1 credit (or use unlimited) when sending a letter."""
+    """First send ever is free. Later: hold 1 credit (or unlimited)."""
+    from app.services.registration import consume_gift_marker
+
     unlimited = await has_unlimited(session, sender.id)
+    if not sender.first_message_free_used:
+        sender.first_message_free_used = True
+        mr.paid_at_send = False
+        mr.credit_held = 0
+        session.add(sender)
+        return
     if unlimited:
         mr.paid_at_send = True
         mr.credit_held = 0
@@ -165,6 +173,7 @@ async def _charge_send(
     if sender.message_credits < 1:
         raise MessageServiceError("no_credits", "Not enough message credits")
     sender.message_credits -= 1
+    consume_gift_marker(sender)
     mr.paid_at_send = True
     mr.credit_held = 1
     session.add(sender)
@@ -175,7 +184,7 @@ async def _charge_send(
             delta=-1,
             balance_after=sender.message_credits,
             message_request_id=mr.id,
-            note="send_letter",
+            note="send_letter_hold",
         )
     )
 
@@ -239,26 +248,6 @@ async def _seed_chat_from_letter(session: AsyncSession, mr: MessageRequest) -> N
                 text_translated=mr.reply_text_translated,
             )
         )
-
-
-async def _open_chat_after_timely_reply(
-    session: AsyncSession,
-    settings: Settings,
-    *,
-    mr: MessageRequest,
-) -> MessageRequest:
-    """First reply within the timeout: chat opens forever, credit is consumed (no refund)."""
-    now = datetime.now(timezone.utc)
-    mr.credit_held = 0
-    mr.status = MessageRequestStatus.CHATTING.value
-    mr.unlocked_at = now
-    session.add(mr)
-    await _seed_chat_from_letter(session, mr)
-    await session.commit()
-    mr = await get_message_request(session, mr.id)
-    assert mr is not None
-    await notify_parties_unlocked(settings, request=mr)
-    return mr
 
 
 async def create_message_request(
@@ -417,7 +406,6 @@ async def reply_message_request(
     if contains_contact_info(cleaned):
         raise MessageServiceError("contact_forbidden", "Contact details are not allowed")
 
-    was_expired = mr.status == MessageRequestStatus.EXPIRED.value
     source_lang = _lang(actor)
     target_lang = _lang(mr.sender, _counterpart_lang(source_lang))
     translated = await translate_text_safe(
@@ -431,12 +419,7 @@ async def reply_message_request(
     mr.responded_at = datetime.now(timezone.utc)
     session.add(mr)
 
-    # Timely reply after a paid send → chat opens forever, no second payment.
-    if not was_expired and mr.paid_at_send:
-        await session.flush()
-        return await _open_chat_after_timely_reply(session, settings, mr=mr)
-
-    # Late reply after refund, or legacy free letter → initiator must unlock again.
+    # Always require unlock (or unlimited auto-unlock). Held credit is consumed at unlock.
     mr.status = MessageRequestStatus.REPLIED.value
     await session.commit()
     mr = await get_message_request(session, mr.id)
@@ -459,6 +442,8 @@ async def unlock_with_credit(
     actor: User,
     payment_id: int | None = None,
 ) -> MessageRequest:
+    from app.services.registration import consume_gift_marker
+
     if mr.sender_user_id != actor.id:
         raise MessageServiceError("forbidden", "Only initiator can unlock")
     if mr.status in {
@@ -471,26 +456,34 @@ async def unlock_with_credit(
     if mr.status != MessageRequestStatus.REPLIED.value:
         raise MessageServiceError("bad_status", "Wait for a reply before paying")
     unlimited = await has_unlimited(session, actor.id)
+    from_gift = False
     if not unlimited:
-        if actor.message_credits < 1:
-            raise MessageServiceError("no_credits", "Not enough message credits")
-        actor.message_credits -= 1
-        session.add(actor)
-        session.add(
-            CreditLedgerEntry(
-                user_id=actor.id,
-                entry_type=LedgerEntryType.SPEND.value,
-                delta=-1,
-                balance_after=actor.message_credits,
-                payment_id=payment_id,
-                message_request_id=mr.id,
-                note="reopen_message",
+        if mr.credit_held >= 1:
+            # Already held at send — consume hold, no second debit.
+            mr.credit_held = 0
+            from_gift = (actor.gift_credits_left or 0) < 3 and (actor.gift_credits_granted)
+        else:
+            if actor.message_credits < 1:
+                raise MessageServiceError("no_credits", "Not enough message credits")
+            actor.message_credits -= 1
+            from_gift = consume_gift_marker(actor)
+            session.add(actor)
+            session.add(
+                CreditLedgerEntry(
+                    user_id=actor.id,
+                    entry_type=LedgerEntryType.SPEND.value,
+                    delta=-1,
+                    balance_after=actor.message_credits,
+                    payment_id=payment_id,
+                    message_request_id=mr.id,
+                    note="unlock_chat",
+                )
             )
-        )
     now = datetime.now(timezone.utc)
     mr.status = MessageRequestStatus.CHATTING.value
     mr.unlocked_at = now
     mr.credit_held = 0
+    mr.unlock_from_gift = from_gift
     if payment_id:
         mr.charged_payment_id = payment_id
     session.add(mr)
@@ -612,3 +605,63 @@ async def inbox_pending_count(session: AsyncSession, user: User) -> int:
         )
     )
     return int(count.scalar_one())
+
+
+async def share_own_telegram(
+    session: AsyncSession,
+    settings: Settings,
+    *,
+    mr: MessageRequest,
+    actor: User,
+) -> MessageRequest:
+    """One-sided: actor reveals their own @username to the peer."""
+    if mr.profile is None:
+        raise MessageServiceError("profile_deleted", "Profile deleted")
+    owner_id = mr.profile.user_id
+    if actor.id not in {mr.sender_user_id, owner_id}:
+        raise MessageServiceError("forbidden", "Not a participant")
+    if mr.status not in {
+        MessageRequestStatus.UNLOCKED.value,
+        MessageRequestStatus.CHATTING.value,
+    }:
+        raise MessageServiceError("locked", "Chat is not unlocked yet")
+    uname = (actor.telegram_username or "").strip().lstrip("@")
+    if not uname:
+        raise MessageServiceError("no_username", "Telegram username required")
+
+    now = datetime.now(timezone.utc)
+    if actor.id == mr.sender_user_id:
+        mr.sender_telegram_shared_at = now
+    else:
+        mr.recipient_telegram_shared_at = now
+        if mr.profile and not (mr.profile.telegram_username or "").strip():
+            mr.profile.telegram_username = uname
+            session.add(mr.profile)
+    session.add(mr)
+    await session.commit()
+    mr = await get_message_request(session, mr.id)
+    assert mr is not None
+    from app.services.notify import notify_telegram_shared
+
+    await notify_telegram_shared(settings, request=mr, sharer=actor)
+    return mr
+
+
+async def hide_message_thread(
+    session: AsyncSession,
+    *,
+    mr: MessageRequest,
+    actor: User,
+) -> MessageRequest:
+    if mr.profile is None and mr.sender_user_id != actor.id:
+        raise MessageServiceError("forbidden", "Not a participant")
+    owner_id = mr.profile.user_id if mr.profile else None
+    if actor.id == mr.sender_user_id:
+        mr.hidden_by_sender = True
+    elif owner_id is not None and actor.id == owner_id:
+        mr.hidden_by_recipient = True
+    else:
+        raise MessageServiceError("forbidden", "Not a participant")
+    session.add(mr)
+    await session.commit()
+    return mr

@@ -20,12 +20,14 @@ from app.services.messages import (
     create_message_request,
     get_message_request,
     get_published_profile,
+    hide_message_thread,
     inbox_pending_count,
     list_chat_messages,
     list_inbox,
     reject_message_request,
     reply_message_request,
     send_chat_message,
+    share_own_telegram,
     unlock_with_credit,
 )
 from app.services.entitlements import has_unlimited
@@ -79,6 +81,11 @@ class MessageRequestOut(BaseModel):
     can_chat: bool
     message_credits: int
     has_unlimited: bool = False
+    unlock_from_gift: bool = False
+    gift_credits_left: int = 0
+    i_shared_telegram: bool = False
+    peer_shared_telegram: bool = False
+    moved_to_telegram: bool = False
 
 
 class InboxOut(BaseModel):
@@ -104,6 +111,7 @@ class WriteTargetOut(BaseModel):
     gender: str | None
     age_min: int
     age_max: int
+    verified: bool = False
     sender: SenderIdentityOut | None = None
 
 
@@ -112,9 +120,18 @@ class ChatOut(BaseModel):
     status: str
     messages: list[ChatMessageOut]
     counterpart_name: str | None
+    counterpart_age: int | None = None
+    counterpart_city: str | None = None
+    counterpart_photo_url: str | None = None
     counterpart_telegram_link: str | None
     profile_deleted: bool = False
     can_send: bool
+    unlock_from_gift: bool = False
+    gift_credits_left: int = 0
+    i_shared_telegram: bool = False
+    peer_shared_telegram: bool = False
+    peer_telegram_link: str | None = None
+    can_share_telegram: bool = False
 
 
 class ReplyIn(BaseModel):
@@ -234,21 +251,26 @@ def _serialize_request(mr: MessageRequest, viewer: User, *, has_unlimited: bool 
         first = sorted(profile.photos, key=lambda p: p.position)[0]
         profile_photo = _photo_url(first.file_id)
 
-    if is_incoming:
-        counterpart_username = mr.sender.telegram_username if mr.sender else None
-    else:
-        counterpart_username = (
-            (profile.telegram_username if profile else None)
-            or (profile.user.telegram_username if profile and profile.user else None)
-        )
-
     status_val = mr.status
     can_chat = status_val in {
         MessageRequestStatus.UNLOCKED.value,
         MessageRequestStatus.CHATTING.value,
     }
-    if not can_chat:
-        counterpart_username = None
+    i_shared = bool(
+        mr.recipient_telegram_shared_at if is_incoming else mr.sender_telegram_shared_at
+    )
+    peer_shared = bool(
+        mr.sender_telegram_shared_at if is_incoming else mr.recipient_telegram_shared_at
+    )
+    counterpart_username = None
+    if can_chat and peer_shared:
+        if is_incoming:
+            counterpart_username = mr.sender.telegram_username if mr.sender else None
+        else:
+            counterpart_username = (
+                (profile.telegram_username if profile else None)
+                or (profile.user.telegram_username if profile and profile.user else None)
+            )
 
     # After a late reply the initiator must re-open: hide reply text until unlock.
     reply_text = mr.reply_text
@@ -297,6 +319,11 @@ def _serialize_request(mr: MessageRequest, viewer: User, *, has_unlimited: bool 
         can_chat=can_chat,
         message_credits=viewer.message_credits,
         has_unlimited=has_unlimited,
+        unlock_from_gift=bool(mr.unlock_from_gift),
+        gift_credits_left=int(viewer.gift_credits_left or 0),
+        i_shared_telegram=i_shared,
+        peer_shared_telegram=peer_shared,
+        moved_to_telegram=i_shared or peer_shared,
     )
 
 
@@ -311,10 +338,18 @@ async def get_inbox(
     session: AsyncSession = Depends(get_session),
 ) -> InboxOut:
     items = await list_inbox(session, auth.user)
+    visible = []
+    for mr in items:
+        is_incoming = bool(mr.profile and mr.profile.user_id == auth.user.id)
+        if is_incoming and mr.hidden_by_recipient:
+            continue
+        if not is_incoming and mr.hidden_by_sender:
+            continue
+        visible.append(mr)
     pending = await inbox_pending_count(session, auth.user)
     unlimited = await has_unlimited(session, auth.user.id)
     return InboxOut(
-        items=[_serialize_request(mr, auth.user, has_unlimited=unlimited) for mr in items],
+        items=[_serialize_request(mr, auth.user, has_unlimited=unlimited) for mr in visible],
         pending_incoming=pending,
         message_credits=auth.user.message_credits,
     )
@@ -334,6 +369,8 @@ async def write_target(
         first = sorted(profile.photos, key=lambda p: p.position)[0]
         photo = _photo_url(first.file_id)
     identity = await _resolve_sender_identity(session, auth.user)
+    from app.models import VerificationStatus
+
     return WriteTargetOut(
         profile_id=profile.id,
         name=profile.name,
@@ -343,6 +380,7 @@ async def write_target(
         gender=profile.gender,
         age_min=profile.age_min or 18,
         age_max=profile.age_max or 99,
+        verified=profile.verification_status == VerificationStatus.VERIFIED.value,
         sender=SenderIdentityOut(
             source=identity.source,
             name=identity.name,
@@ -522,6 +560,39 @@ async def unlock_letter(
     return await _out(session, mr, auth.user)
 
 
+@router.post("/messages/{request_id}/share-telegram", response_model=MessageRequestOut)
+async def share_telegram(
+    request_id: int,
+    auth: AuthContext = Depends(get_auth_context),
+    session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> MessageRequestOut:
+    mr = await get_message_request(session, request_id, for_user=auth.user)
+    if mr is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    try:
+        mr = await share_own_telegram(session, settings, mr=mr, actor=auth.user)
+    except MessageServiceError as exc:
+        _raise_service(exc)
+    return await _out(session, mr, auth.user)
+
+
+@router.post("/messages/{request_id}/hide", response_model=MessageRequestOut)
+async def hide_letter(
+    request_id: int,
+    auth: AuthContext = Depends(get_auth_context),
+    session: AsyncSession = Depends(get_session),
+) -> MessageRequestOut:
+    mr = await get_message_request(session, request_id, for_user=auth.user)
+    if mr is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    try:
+        mr = await hide_message_thread(session, mr=mr, actor=auth.user)
+    except MessageServiceError as exc:
+        _raise_service(exc)
+    return await _out(session, mr, auth.user)
+
+
 @router.post("/messages/buy-credits")
 async def buy_credits(
     body: BuyCreditsIn,
@@ -565,19 +636,32 @@ async def get_chat(
         raise HTTPException(status_code=409, detail="Chat not unlocked")
     msgs = await list_chat_messages(session, mr)
     is_incoming = bool(mr.profile and mr.profile.user_id == auth.user.id)
+    i_shared = bool(
+        mr.recipient_telegram_shared_at if is_incoming else mr.sender_telegram_shared_at
+    )
+    peer_shared = bool(
+        mr.sender_telegram_shared_at if is_incoming else mr.recipient_telegram_shared_at
+    )
+    photo = None
+    age = None
+    city = None
     if is_incoming:
         counterpart = mr.sender_name
-        link = _tg_link(mr.sender.telegram_username if mr.sender else None)
+        age = mr.sender_age
+        photo = _photo_url(mr.sender_photo_file_id)
+        uname = mr.sender.telegram_username if mr.sender else None
     else:
         counterpart = mr.profile.name if mr.profile else mr.profile_name_snapshot
+        age = mr.profile.age if mr.profile else None
+        city = mr.profile.city if mr.profile else None
+        if mr.profile and mr.profile.photos:
+            first = sorted(mr.profile.photos, key=lambda p: p.position)[0]
+            photo = _photo_url(first.file_id)
         uname = (
             (mr.profile.telegram_username if mr.profile else None)
             or (mr.profile.user.telegram_username if mr.profile and mr.profile.user else None)
         )
-        link = _tg_link(uname)
-    can_send = mr.profile is not None
-    if not can_send:
-        link = None
+    peer_link = _tg_link(uname) if peer_shared else None
     return ChatOut(
         request_id=mr.id,
         status=mr.status,
@@ -593,9 +677,18 @@ async def get_chat(
             for m in msgs
         ],
         counterpart_name=counterpart,
-        counterpart_telegram_link=link,
+        counterpart_age=age,
+        counterpart_city=city,
+        counterpart_photo_url=photo,
+        counterpart_telegram_link=peer_link,
         profile_deleted=mr.profile is None,
         can_send=mr.profile is not None,
+        unlock_from_gift=bool(mr.unlock_from_gift),
+        gift_credits_left=int(auth.user.gift_credits_left or 0),
+        i_shared_telegram=i_shared,
+        peer_shared_telegram=peer_shared,
+        peer_telegram_link=peer_link,
+        can_share_telegram=bool((auth.user.telegram_username or "").strip()) and not i_shared,
     )
 
 

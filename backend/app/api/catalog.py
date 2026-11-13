@@ -44,12 +44,17 @@ class CatalogCard(BaseModel):
     is_top: bool = False
     is_new: bool = False
     status: str
+    blurred: bool = False
 
 
 class CatalogPage(BaseModel):
     items: list[CatalogCard]
     next_cursor: str | None
     gender: str | None
+    is_registered: bool = True
+    free_remaining: int | None = None
+    total_count: int | None = None
+    gate_reached: bool = False
 
 
 class CatalogProfileOut(CatalogCard):
@@ -79,26 +84,51 @@ def _card(
     liked: bool = False,
     matched: bool = False,
     fields: dict[str, str] | None = None,
+    blurred: bool = False,
 ) -> CatalogCard:
     request_id = written.get(profile.id)
     loc = fields or {}
+    name = loc.get("name") or profile.name
+    city = loc.get("city") or profile.city
+    if blurred:
+        name = ""
+        city = ""
     return CatalogCard(
         id=profile.id,
-        name=loc.get("name") or profile.name,
-        age=profile.age,
-        city=loc.get("city") or profile.city,
-        country=loc.get("country") or profile.country,
+        name=name,
+        age=0 if blurred else profile.age,
+        city=city,
+        country="" if blurred else (loc.get("country") or profile.country),
         gender=profile.gender,
         photo_urls=card_photos(profile),
         already_written=request_id is not None,
         active_request_id=request_id,
-        verified=profile.verification_status == VerificationStatus.VERIFIED.value,
-        liked=liked,
-        matched=matched,
-        is_top=is_top_now(profile),
-        is_new=is_new_in_catalog(profile),
+        verified=False if blurred else profile.verification_status == VerificationStatus.VERIFIED.value,
+        liked=False if blurred else liked,
+        matched=False if blurred else matched,
+        is_top=False if blurred else is_top_now(profile),
+        is_new=False if blurred else is_new_in_catalog(profile),
         status=profile.status,
+        blurred=blurred,
     )
+
+
+@router.get("/stats")
+async def catalog_stats(
+    auth: AuthContext = Depends(get_auth_context),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    from app.services.catalog_gate import live_catalog_count, waiting_teaser_urls
+    from app.services.registration import profile_is_registered
+
+    own = await get_user_profile(session, auth.user.id)
+    count = await live_catalog_count(session)
+    teasers = await waiting_teaser_urls(session, auth.user.gender or (own.gender if own else None))
+    return {
+        "total_count": count,
+        "is_registered": profile_is_registered(own),
+        "teaser_photo_urls": teasers,
+    }
 
 
 @router.get("", response_model=CatalogPage)
@@ -112,12 +142,46 @@ async def catalog_feed(
     auth: AuthContext = Depends(get_auth_context),
     session: AsyncSession = Depends(get_session),
 ) -> CatalogPage:
+    from app.services.catalog_gate import GUEST_DAILY_LIMIT, list_guest_catalog, live_catalog_count
+    from app.services.registration import profile_is_registered
+
     own = await get_user_profile(session, auth.user.id)
     chosen = gender if gender in {"male", "female", "all"} else None
     if chosen is None:
         chosen = default_catalog_gender(auth.user, own)
     if chosen == "all":
         chosen = None
+    registered = profile_is_registered(own)
+    total = await live_catalog_count(session)
+    lang = _viewer_lang(auth)
+
+    if not registered:
+        profiles, seen_today, free_remaining = await list_guest_catalog(
+            session, viewer=auth.user, gender=chosen, limit=max(limit, GUEST_DAILY_LIMIT + 6)
+        )
+        written = await written_profile_ids(
+            session, sender_id=auth.user.id, profile_ids=[p.id for p in profiles]
+        )
+        max_clear = min(GUEST_DAILY_LIMIT, seen_today)
+        rebuilt = [
+            _card(
+                p,
+                written,
+                fields=None if idx >= max_clear else localized_catalog_fields(p, lang),
+                blurred=idx >= max_clear,
+            )
+            for idx, p in enumerate(profiles)
+        ]
+        return CatalogPage(
+            items=rebuilt,
+            next_cursor=None,
+            gender=chosen,
+            is_registered=False,
+            free_remaining=free_remaining,
+            total_count=total,
+            gate_reached=any(c.blurred for c in rebuilt) or free_remaining <= 0,
+        )
+
     profiles, written, next_cursor = await list_catalog(
         session,
         viewer=auth.user,
@@ -136,7 +200,6 @@ async def catalog_feed(
         viewer_profile_id=own.id if own else None,
         profile_ids=ids,
     )
-    lang = _viewer_lang(auth)
     return CatalogPage(
         items=[
             _card(
@@ -150,6 +213,8 @@ async def catalog_feed(
         ],
         next_cursor=next_cursor,
         gender=chosen,
+        is_registered=True,
+        total_count=total,
     )
 
 
@@ -206,6 +271,11 @@ async def like_catalog_profile(
     session: AsyncSession = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict:
+    from app.services.registration import profile_is_registered
+
+    own = await get_user_profile(session, auth.user.id)
+    if not profile_is_registered(own):
+        raise HTTPException(status_code=403, detail="registration_required")
     profile = await get_catalog_profile(session, profile_id)
     if profile is None:
         raise HTTPException(status_code=404, detail="Profile not found")

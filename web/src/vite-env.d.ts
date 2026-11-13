@@ -31,6 +31,8 @@ type TelegramWebApp = {
   isFullscreen?: boolean;
   isVerticalSwipesEnabled?: boolean;
   requestWriteAccess?: (callback?: (granted: boolean) => void) => void;
+  addToHomeScreen?: () => void;
+  checkHomeScreenStatus?: (callback?: (status: string) => void) => void;
   ready: () => void;
   expand: () => void;
   requestFullscreen?: () => void;

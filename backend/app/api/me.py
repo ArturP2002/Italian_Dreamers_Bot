@@ -55,6 +55,9 @@ class MeResponse(BaseModel):
     is_top: bool = False
     top_until: datetime | None = None
     travel_interest: bool = False
+    is_registered: bool = False
+    gift_credits_left: int = 0
+    first_message_free_used: bool = False
 
 
 class LanguageUpdate(BaseModel):
@@ -86,6 +89,8 @@ async def _touch_last_seen(session: AsyncSession, auth: AuthContext) -> None:
 
 
 async def _build_me(auth: AuthContext, session: AsyncSession) -> MeResponse:
+    from app.services.registration import profile_is_registered
+
     now = datetime.now(timezone.utc)
     soft_ban = auth.user.soft_ban_until
     is_soft_banned = bool(soft_ban and soft_ban > now)
@@ -118,6 +123,9 @@ async def _build_me(auth: AuthContext, session: AsyncSession) -> MeResponse:
         is_top=is_top_now(profile) if profile else False,
         top_until=profile.top_until if profile else None,
         travel_interest=travel.scalar_one_or_none() is not None,
+        is_registered=profile_is_registered(profile),
+        gift_credits_left=int(auth.user.gift_credits_left or 0),
+        first_message_free_used=bool(auth.user.first_message_free_used),
     )
 
 
@@ -126,7 +134,12 @@ async def get_me(
     auth: AuthContext = Depends(get_auth_context),
     session: AsyncSession = Depends(get_session),
 ) -> MeResponse:
+    from app.services.registration import grant_starter_gifts
+
     await _touch_last_seen(session, auth)
+    if await grant_starter_gifts(session, auth.user):
+        await session.commit()
+        await session.refresh(auth.user)
     return await _build_me(auth, session)
 
 
@@ -234,10 +247,14 @@ async def buy_catalog_top(
     session: AsyncSession = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict:
+    from app.services.registration import profile_is_registered
+
     result = await session.execute(select(Profile).where(Profile.user_id == auth.user.id))
     profile = result.scalar_one_or_none()
     if profile is None:
         raise HTTPException(status_code=404, detail="Profile not found")
+    if not profile_is_registered(profile):
+        raise HTTPException(status_code=403, detail="registration_required")
     if profile.status not in {ProfileStatus.QUEUED.value, ProfileStatus.PUBLISHED.value}:
         raise HTTPException(status_code=409, detail="Profile is not in catalog")
     if profile.verification_status != VerificationStatus.VERIFIED.value:

@@ -23,6 +23,9 @@ export type MeUser = {
   is_top?: boolean;
   top_until?: string | null;
   travel_interest?: boolean;
+  is_registered?: boolean;
+  gift_credits_left?: number;
+  first_message_free_used?: boolean;
 };
 
 export type ProfilePhoto = {
@@ -184,12 +187,24 @@ export type CatalogCard = {
   is_top?: boolean;
   is_new?: boolean;
   status: string;
+  blurred?: boolean;
 };
 
 export type CatalogPage = {
   items: CatalogCard[];
   next_cursor: string | null;
   gender: string | null;
+  blurred?: boolean;
+  is_registered?: boolean;
+  free_remaining?: number | null;
+  total_count?: number | null;
+  gate_reached?: boolean;
+};
+
+export type CatalogStats = {
+  total_count: number;
+  is_registered: boolean;
+  teaser_photo_urls: string[];
 };
 
 export type CatalogProfile = CatalogCard & {
@@ -347,6 +362,11 @@ export type MessageRequestItem = {
   can_chat: boolean;
   message_credits: number;
   has_unlimited?: boolean;
+  unlock_from_gift?: boolean;
+  gift_credits_left?: number;
+  i_shared_telegram?: boolean;
+  peer_shared_telegram?: boolean;
+  moved_to_telegram?: boolean;
 };
 
 export type InboxResponse = {
@@ -364,6 +384,8 @@ export type WriteTarget = {
   gender: string | null;
   age_min: number;
   age_max: number;
+  /** Optional: shown as the green «verified» pill when the API provides it. */
+  verified?: boolean;
   sender: {
     source: "profile" | "saved";
     name: string;
@@ -387,9 +409,18 @@ export type ChatThread = {
   status: string;
   messages: ChatMessageItem[];
   counterpart_name: string | null;
+  counterpart_age?: number | null;
+  counterpart_city?: string | null;
+  counterpart_photo_url?: string | null;
   counterpart_telegram_link: string | null;
   profile_deleted: boolean;
   can_send: boolean;
+  unlock_from_gift?: boolean;
+  gift_credits_left?: number;
+  i_shared_telegram?: boolean;
+  peer_shared_telegram?: boolean;
+  peer_telegram_link?: string | null;
+  can_share_telegram?: boolean;
 };
 
 export type ReferralInfo = {
@@ -623,6 +654,10 @@ export async function fetchCatalog(params: {
   if (params.cursor) search.set("cursor", params.cursor);
   const q = search.toString() ? `?${search}` : "";
   return apiFetch<CatalogPage>(`/api/catalog${q}`);
+}
+
+export async function fetchCatalogStats(): Promise<CatalogStats | null> {
+  return apiFetch<CatalogStats>("/api/catalog/stats");
 }
 
 export async function fetchCatalogProfile(id: number): Promise<CatalogProfile | null> {
@@ -891,6 +926,16 @@ export async function replyMessage(id: number, text: string): Promise<MessageReq
 
 export async function unlockMessage(id: number): Promise<MessageRequestItem> {
   return apiFetchJsonOrThrow(`/api/messages/${id}/unlock`, { method: "POST" });
+}
+
+/** Gives only the caller's own @username to the other side (no second consent). */
+export async function shareTelegram(requestId: number): Promise<MessageRequestItem> {
+  return apiFetchJsonOrThrow(`/api/messages/${requestId}/share-telegram`, { method: "POST" });
+}
+
+/** Hides the thread from the caller's inbox (soft hide, nothing is deleted). */
+export async function hideMessage(requestId: number): Promise<MessageRequestItem> {
+  return apiFetchJsonOrThrow(`/api/messages/${requestId}/hide`, { method: "POST" });
 }
 
 export async function buyMessageCredits(opts: {
