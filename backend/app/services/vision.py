@@ -120,6 +120,75 @@ async def photo_has_person(
     return result == "ok"
 
 
+async def assess_verification_selfie(
+    image_bytes: bytes,
+    *,
+    mime: str,
+    api_key: str | None,
+    model: str = DEFAULT_MODEL,
+) -> PhotoCheck:
+    """Lenient face check for live verification selfies.
+
+    Close-up front-camera frames often confuse the strict profile classifier
+    (NONE / MULTI). Here we only reject a clear empty frame / multi-person shot.
+    Ambiguous replies pass through — face-match is the real gate.
+    """
+    if not api_key:
+        return "ok"
+    if not image_bytes:
+        raise VisionError("photo_required", "Empty image")
+    b64 = base64.b64encode(image_bytes).decode("ascii")
+    data_url = f"data:{mime};base64,{b64}"
+    payload = {
+        "model": model,
+        "max_tokens": 10,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            "This is a live front-camera selfie for identity verification.\n"
+                            "Is there a clearly visible real human face?\n"
+                            "Answer with exactly one word:\n"
+                            "YES — one human face is visible (close-up selfie is OK)\n"
+                            "MULTI — two or more people\n"
+                            "NO — no human face visible"
+                        ),
+                    },
+                    {"type": "image_url", "image_url": {"url": data_url, "detail": "high"}},
+                ],
+            }
+        ],
+    }
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                OPENAI_CHAT_URL,
+                headers={"Authorization": f"Bearer {api_key}"},
+                json=payload,
+            )
+            response.raise_for_status()
+            data = response.json()
+    except Exception:
+        logger.exception("Vision selfie check failed")
+        return "ok"
+
+    text = (
+        ((data.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+    ).strip().upper()
+    token = (text.split()[0] if text else "").strip(".,:;!\"'")
+    if token.startswith("MULTI") or "MULTI" in text:
+        return "group"
+    if token in {"NO", "NONE", "ZERO"} or token.startswith("NO"):
+        # Only hard-reject when the model is clearly negative.
+        if "YES" in text or "ONE" in text or "FACE" in text:
+            return "ok"
+        return "no_person"
+    return "ok"
+
+
 def _data_url(image_bytes: bytes, mime: str) -> str:
     b64 = base64.b64encode(image_bytes).decode("ascii")
     return f"data:{mime};base64,{b64}"

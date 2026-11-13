@@ -29,20 +29,24 @@ async function requestCameraStream(): Promise<MediaStream> {
   throw lastError instanceof Error ? lastError : new Error("camera_denied");
 }
 
-function captureCircleJpeg(video: HTMLVideoElement): Promise<Blob | null> {
-  const vw = video.videoWidth || 720;
-  const vh = video.videoHeight || 720;
-  const side = Math.min(vw, vh);
-  const sx = Math.floor((vw - side) / 2);
-  const sy = Math.floor((vh - side) / 2);
+function captureSelfieJpeg(video: HTMLVideoElement): Promise<Blob | null> {
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+  if (!vw || !vh) return Promise.resolve(null);
+  // Keep the full camera frame — the circle is only a framing guide.
+  // Aggressive center-crops confused Vision on close-up faces.
+  const maxSide = 1280;
+  const scale = Math.min(1, maxSide / Math.max(vw, vh));
+  const w = Math.max(1, Math.round(vw * scale));
+  const h = Math.max(1, Math.round(vh * scale));
   const canvas = document.createElement("canvas");
-  canvas.width = side;
-  canvas.height = side;
+  canvas.width = w;
+  canvas.height = h;
   const ctx = canvas.getContext("2d");
   if (!ctx) return Promise.resolve(null);
-  ctx.translate(side, 0);
+  ctx.translate(w, 0);
   ctx.scale(-1, 1);
-  ctx.drawImage(video, sx, sy, side, side, 0, 0, side, side);
+  ctx.drawImage(video, 0, 0, w, h);
   return new Promise((resolve) => canvas.toBlob((b) => resolve(b), "image/jpeg", 0.92));
 }
 
@@ -72,20 +76,26 @@ export function VerifyScreen({ language, onRefresh }: Props) {
     setBusy(true);
     setError(null);
     try {
-      const file = new File([blob], filename, { type: blob.type || "image/jpeg" });
+      const file = new File([blob], filename, { type: "image/jpeg" });
       const res = await uploadVerificationSelfie(file);
       setStatus(res.verification_status);
       onRefresh?.();
       if (res.verification_status === "verified" || res.verification_status === "pending") {
         stopCamera();
+      } else if (res.verification_status === "rejected") {
+        setError(t(language, "verifyRejected"));
       }
     } catch (e) {
       const raw = e instanceof Error ? e.message : "";
       if (raw.includes("group_photo")) {
         setPhotoGuideOpen(true);
         setError(t(language, "photoGroupRejected"));
-      } else {
+      } else if (raw.includes("selfie_no_person") || raw.includes("no_person")) {
         setError(t(language, "writeNoPerson"));
+      } else if (raw.includes("bad_image_type") || raw.includes("invalid_file")) {
+        setError(t(language, "verifyCaptureFailed"));
+      } else {
+        setError(t(language, "verifyCaptureFailed"));
       }
     } finally {
       setBusy(false);
@@ -122,8 +132,11 @@ export function VerifyScreen({ language, onRefresh }: Props) {
   const captureFromPreview = async () => {
     const video = videoRef.current;
     if (!video || camState !== "live" || busy) return;
-    const blob = await captureCircleJpeg(video);
-    if (!blob) return;
+    const blob = await captureSelfieJpeg(video);
+    if (!blob) {
+      setError(t(language, "verifyCaptureFailed"));
+      return;
+    }
     await uploadBlob(blob, "selfie.jpg");
   };
 

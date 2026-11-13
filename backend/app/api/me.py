@@ -23,7 +23,7 @@ from app.services.payments import (
 from app.services.username_nudge import CHECK_BUTTON, MISS_TEXT, OK_TEXT, check_and_store_username, _lang
 from app.services.telegram_api import TelegramApiError
 from app.services.verification import VerificationError, submit_selfie
-from app.services.vision import assess_profile_photo
+from app.services.vision import assess_verification_selfie
 
 
 def _invoice_or_502(exc: TelegramApiError) -> HTTPException:
@@ -265,20 +265,38 @@ async def upload_verification_selfie(
     profile = result.scalar_one_or_none()
     if profile is None:
         raise HTTPException(status_code=404, detail="Profile not found")
-    content_type = (file.content_type or "").lower()
+    content_type = (file.content_type or "").lower().strip()
+    # Some mobile WebViews send canvas blobs with an empty Content-Type.
+    if not content_type or content_type == "application/octet-stream":
+        name = (file.filename or "").lower()
+        if name.endswith(".png"):
+            content_type = "image/png"
+        elif name.endswith(".webp"):
+            content_type = "image/webp"
+        else:
+            content_type = "image/jpeg"
     if content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(status_code=400, detail="Only JPEG/PNG/WebP images allowed")
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "bad_image_type", "message": "Only JPEG/PNG/WebP images allowed"},
+        )
     raw = await file.read()
     if not raw or len(raw) > 8 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="Invalid file")
-    check = await assess_profile_photo(
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "invalid_file", "message": "Invalid file"},
+        )
+    check = await assess_verification_selfie(
         raw,
-        mime=content_type or "image/jpeg",
+        mime=content_type,
         api_key=settings.translation_api_key,
         model=settings.openai_vision_model,
     )
     if check == "no_person":
-        raise HTTPException(status_code=400, detail={"code": "selfie_no_person", "message": "Selfie must show a person"})
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "selfie_no_person", "message": "Selfie must show a person"},
+        )
     if check == "group":
         raise HTTPException(
             status_code=400,
@@ -292,7 +310,7 @@ async def upload_verification_selfie(
     filename = f"{uuid.uuid4().hex}{ext}"
     dest: Path = VERIFY_MEDIA / filename
     dest.write_bytes(raw)
-    mime = content_type or "image/jpeg"
+    mime = content_type
     try:
         profile = await submit_selfie(
             session,
