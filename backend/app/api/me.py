@@ -93,15 +93,15 @@ async def _touch_last_seen(session: AsyncSession, auth: AuthContext) -> None:
 
 async def _build_me(auth: AuthContext, session: AsyncSession) -> MeResponse:
     from app.models import MessageRequest, MessageRequestStatus
-    from app.services.profiles import profile_completion_percent
+    from app.services.profiles import get_user_profile, profile_completion_percent
     from app.services.registration import profile_is_registered
     from sqlalchemy import func
 
     now = datetime.now(timezone.utc)
     soft_ban = auth.user.soft_ban_until
     is_soft_banned = bool(soft_ban and soft_ban > now)
-    result = await session.execute(select(Profile).where(Profile.user_id == auth.user.id))
-    profile = result.scalar_one_or_none()
+    # get_user_profile eager-loads photos; lazy access in async → MissingGreenlet → /api/me 500.
+    profile = await get_user_profile(session, auth.user.id)
     sub = await active_subscription(session, auth.user.id)
     travel = await session.execute(
         select(TravelInterest.id).where(TravelInterest.user_id == auth.user.id)

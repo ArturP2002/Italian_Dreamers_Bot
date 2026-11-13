@@ -116,10 +116,20 @@ def profile_completion_percent(profile: Profile | None) -> int:
     """Rough readiness for soft nudges (0–100)."""
     if profile is None:
         return 0
+    # Avoid lazy-load in async contexts (MissingGreenlet) if photos were not eager-loaded.
+    has_photos = False
+    try:
+        from sqlalchemy import inspect as sa_inspect
+
+        state = sa_inspect(profile)
+        if "photos" not in state.unloaded:
+            has_photos = bool(profile.photos)
+    except Exception:
+        has_photos = False
     checks = [
         bool((profile.name or "").strip()),
         bool(profile.age and profile.age >= 18),
-        bool(profile.photos),
+        has_photos,
         bool(profile.personal_data_agreement),
         bool((profile.city or "").strip()),
         bool((profile.profession or "").strip()),
