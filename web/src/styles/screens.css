@@ -1347,11 +1347,17 @@
   background: #1a1511;
 }
 
+.verify-camera__frame--live .verify-camera__video {
+  opacity: 1;
+}
+
 .verify-camera__video {
   width: 100%;
   height: 100%;
   object-fit: cover;
   transform: scaleX(-1);
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }
 
 .verify-camera__circle {

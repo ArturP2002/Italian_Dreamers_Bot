@@ -6,21 +6,67 @@ import { fetchMe, uploadVerificationSelfie } from "../lib/api";
 
 type Props = { language: Language; onRefresh?: () => void };
 
+type CamState = "idle" | "starting" | "live" | "denied";
+
+async function requestCameraStream(): Promise<MediaStream> {
+  const media = navigator.mediaDevices;
+  if (!media?.getUserMedia) {
+    throw new Error("getUserMedia unsupported");
+  }
+  // Try front camera first, then any camera — Telegram iOS is picky about constraints.
+  const attempts: MediaStreamConstraints[] = [
+    { audio: false, video: { facingMode: { ideal: "user" }, width: { ideal: 720 }, height: { ideal: 720 } } },
+    { audio: false, video: { facingMode: "user" } },
+    { audio: false, video: true },
+  ];
+  let lastError: unknown;
+  for (const constraints of attempts) {
+    try {
+      return await media.getUserMedia(constraints);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("camera_denied");
+}
+
+/** Crop mirrored frame to the circle guide (center square of the video). */
+function captureCircleJpeg(video: HTMLVideoElement): Promise<Blob | null> {
+  const vw = video.videoWidth || 720;
+  const vh = video.videoHeight || 720;
+  const side = Math.min(vw, vh);
+  const sx = Math.floor((vw - side) / 2);
+  const sy = Math.floor((vh - side) / 2);
+  const canvas = document.createElement("canvas");
+  canvas.width = side;
+  canvas.height = side;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return Promise.resolve(null);
+  // Mirror horizontally to match preview.
+  ctx.translate(side, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(video, sx, sy, side, side, 0, 0, side, side);
+  return new Promise((resolve) => canvas.toBlob((b) => resolve(b), "image/jpeg", 0.92));
+}
+
 export function VerifyScreen({ language, onRefresh }: Props) {
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [photoGuideOpen, setPhotoGuideOpen] = useState(false);
-  const [cameraReady, setCameraReady] = useState(false);
+  const [camState, setCamState] = useState<CamState>("idle");
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
-    setCameraReady(false);
+    const video = videoRef.current;
+    if (video) {
+      video.srcObject = null;
+    }
+    setCamState("idle");
   }, []);
 
   useEffect(() => {
@@ -57,70 +103,47 @@ export function VerifyScreen({ language, onRefresh }: Props) {
     await uploadBlob(file, file.name || "selfie.jpg");
   };
 
-  /** Live preview only after a tap — iOS Telegram blocks auto getUserMedia. */
   const startLivePreview = async () => {
-    if (!navigator.mediaDevices?.getUserMedia) return false;
+    if (busy || camState === "starting" || camState === "live") return;
+    setError(null);
+    setCamState("starting");
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: { facingMode: "user" },
-      });
+      const stream = await requestCameraStream();
       streamRef.current = stream;
       const video = videoRef.current;
-      if (video) {
-        video.srcObject = stream;
-        await video.play();
-        setCameraReady(true);
-        return true;
+      if (!video) {
+        stream.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        setCamState("denied");
+        return;
       }
-      stopCamera();
-      return false;
+      video.setAttribute("playsinline", "true");
+      video.setAttribute("webkit-playsinline", "true");
+      video.muted = true;
+      video.srcObject = stream;
+      await video.play();
+      setCamState("live");
     } catch {
       stopCamera();
-      return false;
+      setCamState("denied");
+      setError(t(language, "verifyCameraDenied"));
     }
   };
 
   const captureFromPreview = async () => {
     const video = videoRef.current;
-    if (!video || !cameraReady || busy) return;
-    const w = video.videoWidth || 720;
-    const h = video.videoHeight || 960;
-    const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.translate(w, 0);
-    ctx.scale(-1, 1);
-    ctx.drawImage(video, 0, 0, w, h);
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob((b) => resolve(b), "image/jpeg", 0.92),
-    );
+    if (!video || camState !== "live" || busy) return;
+    const blob = await captureCircleJpeg(video);
     if (!blob) return;
     await uploadBlob(blob, "selfie.jpg");
   };
 
-  const onCaptureTap = async () => {
-    if (busy) return;
-    // In Telegram iOS WebView getUserMedia is usually blocked — open the
-    // system front camera immediately. Live preview is a best-effort bonus.
-    const ua = navigator.userAgent || "";
-    const isIOS = /iPhone|iPad|iPod/i.test(ua);
-    if (isIOS) {
-      cameraInputRef.current?.click();
-      return;
-    }
-    const live = await startLivePreview();
-    if (live) return;
-    cameraInputRef.current?.click();
-  };
-
   const canCapture = status !== "verified" && status !== "pending";
+  const isLive = camState === "live";
 
   return (
     <section className="screen screen--milky">
-      <Link to="/" className="work-back">
+      <Link to="/" className="work-back" onClick={() => stopCamera()}>
         ← {t(language, "backHome")}
       </Link>
       <h1 className="work-title">{t(language, "verifyTitle")}</h1>
@@ -132,7 +155,7 @@ export function VerifyScreen({ language, onRefresh }: Props) {
       {canCapture ? (
         <>
           <div className="verify-camera">
-            <div className="verify-camera__frame">
+            <div className={`verify-camera__frame${isLive ? " verify-camera__frame--live" : ""}`}>
               <video
                 ref={videoRef}
                 className="verify-camera__video"
@@ -141,30 +164,34 @@ export function VerifyScreen({ language, onRefresh }: Props) {
                 autoPlay
               />
               <div className="verify-camera__circle" aria-hidden />
-              {!cameraReady ? (
-                <p className="verify-camera__hint">{t(language, "verifyCircleHint")}</p>
+              {!isLive ? (
+                <p className="verify-camera__hint">
+                  {camState === "starting"
+                    ? t(language, "verifyCameraStarting")
+                    : t(language, "verifyCircleHint")}
+                </p>
               ) : null}
             </div>
             <p className="verify-camera__caption">{t(language, "verifyOvalHint")}</p>
           </div>
 
-          {cameraReady ? (
+          {isLive ? (
             <button
               type="button"
               className="btn btn--block btn--dark"
               disabled={busy}
               onClick={() => void captureFromPreview()}
             >
-              {busy ? t(language, "saving") : t(language, "verifyCapture")}
+              {busy ? t(language, "saving") : t(language, "verifyShoot")}
             </button>
           ) : (
             <button
               type="button"
               className="btn btn--block btn--dark"
-              disabled={busy}
-              onClick={() => void onCaptureTap()}
+              disabled={busy || camState === "starting"}
+              onClick={() => void startLivePreview()}
             >
-              {busy ? t(language, "saving") : t(language, "verifyCapture")}
+              {camState === "starting" ? t(language, "verifyCameraStarting") : t(language, "verifyOpenCamera")}
             </button>
           )}
 
@@ -177,19 +204,6 @@ export function VerifyScreen({ language, onRefresh }: Props) {
             {t(language, "verifyUpload")}
           </button>
 
-          <input
-            ref={cameraInputRef}
-            type="file"
-            accept="image/*"
-            capture="user"
-            hidden
-            disabled={busy}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              e.target.value = "";
-              void onFile(file);
-            }}
-          />
           <input
             ref={galleryInputRef}
             type="file"
