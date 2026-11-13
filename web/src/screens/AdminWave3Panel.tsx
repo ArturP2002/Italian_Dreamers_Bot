@@ -52,11 +52,23 @@ export function AdminWave3Panel({ tab }: { tab: Tab }) {
         <ul className="admin-list">
           {verifications.map((v) => (
             <li key={v.id} className="admin-payment">
-              {v.photo_url ? <img src={mediaUrl(v.photo_url)} alt="" style={{ width: 72, height: 96, objectFit: "cover" }} /> : null}
+              <div className="admin-verify-photos">
+                {v.photo_url ? (
+                  <img src={mediaUrl(v.photo_url)} alt="" className="admin-verify-photos__selfie" />
+                ) : null}
+                {(v.profile_photo_urls ?? []).map((url) => (
+                  <img key={url} src={mediaUrl(url)} alt="" className="admin-verify-photos__profile" />
+                ))}
+              </div>
               <strong>
                 {v.name}, {v.age} · {v.city}
               </strong>
               <span>@{v.username || v.user_telegram_id || "—"}</span>
+              <span className="home-meta">
+                Vision: {v.auto_decision || "—"}
+                {typeof v.auto_score === "number" ? ` · ${v.auto_score}%` : ""}
+                {v.auto_reason ? ` · ${v.auto_reason}` : ""}
+              </span>
               <div className="admin-row-actions">
                 <button type="button" className="admin-btn" onClick={() => void adminDecideVerification(v.id, true).then(() => reload())}>
                   Ок

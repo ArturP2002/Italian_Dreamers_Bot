@@ -1035,7 +1035,14 @@ export async function buyCatalogTop(): Promise<{ ok: boolean; already?: boolean;
   return apiFetchJsonOrThrow("/api/me/catalog-top", { method: "POST" });
 }
 
-export async function uploadVerificationSelfie(file: File): Promise<{ ok: boolean; verification_status: string }> {
+export async function uploadVerificationSelfie(
+  file: File,
+): Promise<{
+  ok: boolean;
+  verification_status: string;
+  auto_decision?: string | null;
+  auto_score?: number | null;
+}> {
   const body = new FormData();
   body.append("file", file);
   return apiFetchJsonOrThrow("/api/me/verification", { method: "POST", body });
@@ -1055,6 +1062,10 @@ export type AdminVerification = {
   photo_url: string | null;
   user_telegram_id: number | null;
   username: string | null;
+  auto_decision?: string | null;
+  auto_score?: number | null;
+  auto_reason?: string | null;
+  profile_photo_urls?: string[];
 };
 
 export type AdminLegacy = {

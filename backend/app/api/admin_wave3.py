@@ -31,6 +31,10 @@ class VerificationOut(BaseModel):
     photo_url: str | None
     user_telegram_id: int | None
     username: str | None
+    auto_decision: str | None = None
+    auto_score: int | None = None
+    auto_reason: str | None = None
+    profile_photo_urls: list[str] = []
 
 
 class VerificationDecide(BaseModel):
@@ -84,6 +88,15 @@ class ReportOut(BaseModel):
     sent_at: datetime | None
 
 
+def _profile_photo_urls(profile: Profile) -> list[str]:
+    urls: list[str] = []
+    for photo in sorted(profile.photos or [], key=lambda p: p.position)[:3]:
+        fid = photo.file_id or ""
+        if fid.startswith("local:"):
+            urls.append(f"/media/profiles/{fid.removeprefix('local:')}")
+    return urls
+
+
 def _verify_out(profile: Profile) -> VerificationOut:
     user = profile.user
     return VerificationOut(
@@ -96,6 +109,10 @@ def _verify_out(profile: Profile) -> VerificationOut:
         photo_url=verification_photo_url(profile.verification_photo_file_id),
         user_telegram_id=user.telegram_id if user else None,
         username=(user.telegram_username if user else None) or profile.telegram_username,
+        auto_decision=profile.verification_auto_decision,
+        auto_score=profile.verification_auto_score,
+        auto_reason=profile.verification_auto_reason,
+        profile_photo_urls=_profile_photo_urls(profile),
     )
 
 

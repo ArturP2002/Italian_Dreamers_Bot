@@ -276,6 +276,9 @@ class Profile(Base):
         String(16), nullable=False, default=VerificationStatus.NONE.value, server_default="none"
     )
     verification_photo_file_id: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    verification_auto_decision: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    verification_auto_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    verification_auto_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     top_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 

@@ -292,12 +292,25 @@ async def upload_verification_selfie(
     filename = f"{uuid.uuid4().hex}{ext}"
     dest: Path = VERIFY_MEDIA / filename
     dest.write_bytes(raw)
+    mime = content_type or "image/jpeg"
     try:
-        profile = await submit_selfie(session, profile, f"local:{filename}")
+        profile = await submit_selfie(
+            session,
+            settings,
+            profile,
+            f"local:{filename}",
+            selfie_bytes=raw,
+            selfie_mime=mime,
+        )
     except VerificationError as exc:
         dest.unlink(missing_ok=True)
         raise HTTPException(status_code=409, detail=exc.code) from exc
-    return {"ok": True, "verification_status": profile.verification_status}
+    return {
+        "ok": True,
+        "verification_status": profile.verification_status,
+        "auto_decision": profile.verification_auto_decision,
+        "auto_score": profile.verification_auto_score,
+    }
 
 
 @router.post("/travel-interest")
