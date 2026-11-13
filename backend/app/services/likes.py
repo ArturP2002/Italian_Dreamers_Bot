@@ -38,9 +38,18 @@ async def matched_profile_ids(
     viewer_profile_id: int | None,
     profile_ids: list[int],
 ) -> set[int]:
+    """Profiles where BOTH sides liked: viewer→them and they→viewer's profile.
+
+    Incoming-only likes must NOT count as «взаимная симпатия».
+    """
     if not profile_ids or viewer_profile_id is None:
         return set()
-    owners = await session.execute(select(Profile.id, Profile.user_id).where(Profile.id.in_(profile_ids)))
+    liked_by_me = await liked_profile_ids(session, viewer_id, profile_ids)
+    if not liked_by_me:
+        return set()
+    owners = await session.execute(
+        select(Profile.id, Profile.user_id).where(Profile.id.in_(list(liked_by_me)))
+    )
     owner_by_profile = {int(pid): int(uid) for pid, uid in owners.all()}
     owner_ids = list(owner_by_profile.values())
     if not owner_ids:

@@ -2244,9 +2244,9 @@
 }
 
 .inbox-card__photo {
-  width: 64px;
-  height: 64px;
-  border-radius: 12px;
+  width: 96px;
+  height: 96px;
+  border-radius: 14px;
   overflow: hidden;
   background: var(--color-card);
   color: var(--color-cream);
@@ -2254,12 +2254,14 @@
   place-items: center;
   flex-shrink: 0;
   font-weight: 600;
+  font-size: 28px;
 }
 
 .inbox-card__photo img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center 22%;
 }
 
 .inbox-card__body {
@@ -3233,11 +3235,20 @@
   border-color: rgba(26, 21, 17, 0.25);
 }
 
+.screen--catalog {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.screen--catalog .work-title {
+  margin-bottom: 4px;
+}
+
 .catalog-filters {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin: 12px 0 8px;
+  gap: 6px;
+  margin: 8px 0 6px;
   max-width: 100%;
 }
 
@@ -3251,8 +3262,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 14px;
+  gap: 6px;
+  margin-bottom: 10px;
   max-width: 100%;
 }
 
@@ -3301,8 +3312,11 @@
 .catalog-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  max-width: 100%;
+  gap: 2px;
+  width: calc(100% + 24px);
+  max-width: none;
+  margin-left: -12px;
+  margin-right: -12px;
 }
 
 .catalog-card {
@@ -3312,9 +3326,10 @@
   text-decoration: none;
   color: var(--color-cream);
   background: var(--color-card);
-  border-radius: var(--radius-lg);
+  border-radius: 0;
   overflow: hidden;
   min-width: 0;
+  isolation: isolate;
 }
 
 .catalog-card__media {
@@ -3328,6 +3343,7 @@
   display: block;
   width: 100%;
   height: 100%;
+  overflow: hidden;
   text-decoration: none;
   color: inherit;
 }
@@ -3337,8 +3353,10 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center 22%;
   background: #3a322a;
   display: block;
+  pointer-events: none;
 }
 
 .catalog-card__badge {
@@ -3755,15 +3773,15 @@
   z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  padding: 36px 8px 8px;
+  gap: 0;
+  padding: 28px 6px 7px;
   text-decoration: none;
   color: #fff;
   background: linear-gradient(
     180deg,
     rgba(26, 21, 17, 0) 0%,
-    rgba(26, 21, 17, 0.72) 55%,
-    rgba(26, 21, 17, 0.9) 100%
+    rgba(26, 21, 17, 0.7) 48%,
+    rgba(26, 21, 17, 0.92) 100%
   );
 }
 
@@ -3771,9 +3789,11 @@
 .catalog-card__link span,
 .catalog-card__link em {
   padding: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.2;
 }
 
 .catalog-card__link strong {
@@ -3781,7 +3801,7 @@
   font-family: var(--font-display);
   font-size: 11px;
   font-weight: 900;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
   text-transform: uppercase;
   color: #fff;
 }
@@ -3793,9 +3813,10 @@
 }
 
 .catalog-card__link em {
+  margin-top: 1px;
   font-size: 9px;
   font-style: normal;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.72);
 }
 
 .catalog-card__match {
@@ -3820,12 +3841,12 @@
 }
 
 .catalog-grid .like-heart {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
 }
 
 .catalog-grid .like-heart__glyph {
-  font-size: 16px;
+  font-size: 14px;
 }
 
 .like-heart:active {
@@ -3856,10 +3877,29 @@
 
 .like-heart--card-br {
   position: absolute;
-  top: 6px;
-  right: 6px;
+  top: 4px;
+  right: 4px;
   bottom: auto;
   z-index: 3;
+}
+
+.catalog-grid .catalog-card__badge {
+  width: 20px;
+  height: 20px;
+  top: 4px;
+  left: 4px;
+}
+
+.catalog-grid .catalog-card__badge--new {
+  height: 16px;
+  top: 4px;
+  left: 4px;
+  font-size: 7px;
+}
+
+.catalog-grid .catalog-card__badge--verified.catalog-card__badge--offset {
+  top: 28px;
+  left: 4px;
 }
 
 .match-banner {

@@ -81,7 +81,9 @@ export function CatalogScreen({ language, me = null }: Props) {
   const goCreateProfile = () => navigate("/profile");
 
   return (
-    <section className={`screen screen--milky${showGate ? " screen--with-sheet" : ""}`}>
+    <section
+      className={`screen screen--milky screen--catalog${showGate ? " screen--with-sheet" : ""}`}
+    >
       <Link to="/" className="work-back">
         ← {t(language, "backHome")}
       </Link>

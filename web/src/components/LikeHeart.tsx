@@ -6,9 +6,9 @@ type Props = {
   "aria-label"?: string;
 };
 
-/** Catalog heart — same white heart vibe as home «Симпатии» (🤍 → ❤️). */
+/** Catalog heart — filled only when the viewer liked (match ≠ one-sided incoming). */
 export function LikeHeart({ liked, matched, className = "", onClick, ...rest }: Props) {
-  const on = Boolean(liked || matched);
+  const on = Boolean(liked);
   return (
     <button
       type="button"
