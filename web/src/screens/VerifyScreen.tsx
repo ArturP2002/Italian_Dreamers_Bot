@@ -12,9 +12,10 @@ export function VerifyScreen({ language, onRefresh }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [photoGuideOpen, setPhotoGuideOpen] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
-  const [cameraError, setCameraError] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const galleryInputRef = useRef<HTMLInputElement | null>(null);
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -22,46 +23,10 @@ export function VerifyScreen({ language, onRefresh }: Props) {
     setCameraReady(false);
   }, []);
 
-  const startCamera = useCallback(async () => {
-    setCameraError(false);
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setCameraError(true);
-      return;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          facingMode: { ideal: "user" },
-          width: { ideal: 720 },
-          height: { ideal: 960 },
-        },
-      });
-      streamRef.current = stream;
-      const video = videoRef.current;
-      if (video) {
-        video.srcObject = stream;
-        await video.play();
-        setCameraReady(true);
-      }
-    } catch {
-      setCameraError(true);
-      stopCamera();
-    }
-  }, [stopCamera]);
-
   useEffect(() => {
     void fetchMe().then((me) => setStatus(me?.verification_status ?? "none"));
-  }, []);
-
-  useEffect(() => {
-    if (status === "verified" || status === "pending") {
-      stopCamera();
-      return;
-    }
-    void startCamera();
     return () => stopCamera();
-  }, [status, startCamera, stopCamera]);
+  }, [stopCamera]);
 
   const uploadBlob = async (blob: Blob, filename: string) => {
     setBusy(true);
@@ -87,7 +52,36 @@ export function VerifyScreen({ language, onRefresh }: Props) {
     }
   };
 
-  const capture = async () => {
+  const onFile = async (file: File | undefined) => {
+    if (!file) return;
+    await uploadBlob(file, file.name || "selfie.jpg");
+  };
+
+  /** Live preview only after a tap — iOS Telegram blocks auto getUserMedia. */
+  const startLivePreview = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) return false;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: "user" },
+      });
+      streamRef.current = stream;
+      const video = videoRef.current;
+      if (video) {
+        video.srcObject = stream;
+        await video.play();
+        setCameraReady(true);
+        return true;
+      }
+      stopCamera();
+      return false;
+    } catch {
+      stopCamera();
+      return false;
+    }
+  };
+
+  const captureFromPreview = async () => {
     const video = videoRef.current;
     if (!video || !cameraReady || busy) return;
     const w = video.videoWidth || 720;
@@ -97,7 +91,6 @@ export function VerifyScreen({ language, onRefresh }: Props) {
     canvas.height = h;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    // Mirror to match the preview (user selfie feel).
     ctx.translate(w, 0);
     ctx.scale(-1, 1);
     ctx.drawImage(video, 0, 0, w, h);
@@ -108,9 +101,19 @@ export function VerifyScreen({ language, onRefresh }: Props) {
     await uploadBlob(blob, "selfie.jpg");
   };
 
-  const onFile = async (file: File | undefined) => {
-    if (!file) return;
-    await uploadBlob(file, file.name || "selfie.jpg");
+  const onCaptureTap = async () => {
+    if (busy) return;
+    // In Telegram iOS WebView getUserMedia is usually blocked — open the
+    // system front camera immediately. Live preview is a best-effort bonus.
+    const ua = navigator.userAgent || "";
+    const isIOS = /iPhone|iPad|iPod/i.test(ua);
+    if (isIOS) {
+      cameraInputRef.current?.click();
+      return;
+    }
+    const live = await startLivePreview();
+    if (live) return;
+    cameraInputRef.current?.click();
   };
 
   const canCapture = status !== "verified" && status !== "pending";
@@ -137,12 +140,9 @@ export function VerifyScreen({ language, onRefresh }: Props) {
                 muted
                 autoPlay
               />
-              <div className="verify-camera__oval" aria-hidden />
-              {!cameraReady && !cameraError ? (
-                <p className="verify-camera__hint">{t(language, "verifyCameraStarting")}</p>
-              ) : null}
-              {cameraError ? (
-                <p className="verify-camera__hint">{t(language, "verifyCameraFallback")}</p>
+              <div className="verify-camera__circle" aria-hidden />
+              {!cameraReady ? (
+                <p className="verify-camera__hint">{t(language, "verifyCircleHint")}</p>
               ) : null}
             </div>
             <p className="verify-camera__caption">{t(language, "verifyOvalHint")}</p>
@@ -153,23 +153,55 @@ export function VerifyScreen({ language, onRefresh }: Props) {
               type="button"
               className="btn btn--block btn--dark"
               disabled={busy}
-              onClick={() => void capture()}
+              onClick={() => void captureFromPreview()}
             >
               {busy ? t(language, "saving") : t(language, "verifyCapture")}
             </button>
-          ) : null}
-
-          <label className="btn btn--block btn--ghost verify-fallback">
-            {busy ? t(language, "saving") : t(language, "verifyUpload")}
-            <input
-              type="file"
-              accept="image/*"
-              capture="user"
-              hidden
+          ) : (
+            <button
+              type="button"
+              className="btn btn--block btn--dark"
               disabled={busy}
-              onChange={(e) => void onFile(e.target.files?.[0])}
-            />
-          </label>
+              onClick={() => void onCaptureTap()}
+            >
+              {busy ? t(language, "saving") : t(language, "verifyCapture")}
+            </button>
+          )}
+
+          <button
+            type="button"
+            className="btn btn--block btn--ghost verify-fallback"
+            disabled={busy}
+            onClick={() => galleryInputRef.current?.click()}
+          >
+            {t(language, "verifyUpload")}
+          </button>
+
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="user"
+            hidden
+            disabled={busy}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              void onFile(file);
+            }}
+          />
+          <input
+            ref={galleryInputRef}
+            type="file"
+            accept="image/*"
+            hidden
+            disabled={busy}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              void onFile(file);
+            }}
+          />
         </>
       ) : null}
 

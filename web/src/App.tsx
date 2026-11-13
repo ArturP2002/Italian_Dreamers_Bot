@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { type Language, loadLanguage, saveLanguage } from "./i18n/messages";
 import { claimLegacyInvite, claimReferral, fetchMe, patchLanguage, type MeUser } from "./lib/api";
+import { initTelegramFullscreen } from "./lib/telegramViewport";
 import { AdFormScreen } from "./screens/AdFormScreen";
 import { AdminScreen } from "./screens/AdminScreen";
 import { CatalogProfileScreen } from "./screens/CatalogProfileScreen";
@@ -59,13 +60,7 @@ export default function App() {
   const [booting, setBooting] = useState(() => Boolean(initialLanguageRef.current));
   const [deepLinkHandled, setDeepLinkHandled] = useState(false);
 
-  useEffect(() => {
-    const tg = window.Telegram?.WebApp;
-    tg?.ready();
-    tg?.expand();
-    tg?.setHeaderColor?.("#1A1511");
-    tg?.setBackgroundColor?.("#1A1511");
-  }, []);
+  useEffect(() => initTelegramFullscreen(), []);
 
   const refreshMe = useCallback(async () => {
     const user = await fetchMe();
