@@ -1423,6 +1423,155 @@
   }
 }
 
+.verify-screen--ritual {
+  overflow: hidden;
+}
+
+.verify-ritual {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(20px + var(--safe-top)) 20px calc(24px + var(--safe-bottom));
+  pointer-events: auto;
+}
+
+.verify-ritual__scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(26, 21, 17, 0.72);
+  opacity: 0;
+  transition: opacity 0.55s ease;
+}
+
+.verify-ritual--expanded .verify-ritual__scrim {
+  opacity: 1;
+}
+
+.verify-ritual__stage {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 340px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+}
+
+.verify-ritual__circle {
+  position: relative;
+  width: min(72vw, 280px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #1a1511;
+  box-shadow: 0 0 0 3px rgba(245, 240, 232, 0.35);
+  transform: scale(0.72);
+  transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1), transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.verify-ritual--expanded .verify-ritual__circle {
+  width: min(88vw, 360px);
+  transform: scale(1);
+}
+
+.verify-ritual__photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.verify-ritual__veil {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, rgba(26, 21, 17, 0.15) 0%, rgba(26, 21, 17, 0.55) 100%);
+  pointer-events: none;
+}
+
+.verify-ritual__phrase {
+  position: absolute;
+  left: 14%;
+  right: 14%;
+  top: 50%;
+  margin: 0;
+  text-align: center;
+  color: #f5f0e8;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(18px, 5vw, 22px);
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.45);
+  animation: verify-phrase-in 0.45s ease both;
+}
+
+.verify-ritual__verdict {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 18%;
+  text-align: center;
+  animation: verify-verdict-in 0.5s ease both;
+}
+
+.verify-ritual__verdict-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  font-size: clamp(26px, 7vw, 34px);
+  line-height: 1.05;
+  color: #f5f0e8;
+  text-shadow: 0 1px 14px rgba(0, 0, 0, 0.4);
+}
+
+.verify-ritual__verdict-body {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  color: rgba(245, 240, 232, 0.9);
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.35);
+}
+
+.verify-ritual__verdict--fail .verify-ritual__verdict-title {
+  color: #f0c9c9;
+}
+
+.verify-ritual__done {
+  width: 100%;
+  animation: verify-verdict-in 0.45s ease 0.08s both;
+}
+
+@keyframes verify-phrase-in {
+  from {
+    opacity: 0;
+    transform: translateY(calc(-50% + 10px));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-50%);
+  }
+}
+
+@keyframes verify-verdict-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .admin-verify-photos {
   display: flex;
   gap: 8px;

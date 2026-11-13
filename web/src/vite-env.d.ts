@@ -54,6 +54,10 @@ type TelegramWebApp = {
     message: string;
     buttons?: Array<{ id?: string; type?: string; text?: string }>;
   }, callback?: (id: string) => void) => void;
+  HapticFeedback?: {
+    impactOccurred?: (style: "light" | "medium" | "heavy" | "rigid" | "soft") => void;
+    notificationOccurred?: (type: "error" | "success" | "warning") => void;
+  };
 };
 
 declare global {

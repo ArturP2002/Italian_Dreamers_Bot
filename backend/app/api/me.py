@@ -328,6 +328,7 @@ async def upload_verification_selfie(
         "verification_status": profile.verification_status,
         "auto_decision": profile.verification_auto_decision,
         "auto_score": profile.verification_auto_score,
+        "auto_reason": profile.verification_auto_reason,
     }
 
 

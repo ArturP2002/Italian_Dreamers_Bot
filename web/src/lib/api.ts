@@ -1042,6 +1042,7 @@ export async function uploadVerificationSelfie(
   verification_status: string;
   auto_decision?: string | null;
   auto_score?: number | null;
+  auto_reason?: string | null;
 }> {
   const body = new FormData();
   body.append("file", file);
