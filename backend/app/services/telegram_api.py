@@ -71,6 +71,28 @@ async def send_message(
     return await telegram_call(settings, "sendMessage", json=body)
 
 
+def _stars_invoice_body(
+    *,
+    title: str,
+    description: str,
+    payload: str,
+    stars_amount: int,
+    label: str | None = None,
+    subscription_period: int | None = None,
+) -> dict[str, Any]:
+    body: dict[str, Any] = {
+        "title": title[:32],
+        "description": description[:255],
+        "payload": payload[:128],
+        "currency": "XTR",
+        "provider_token": "",
+        "prices": [{"label": label or title[:32], "amount": stars_amount}],
+    }
+    if subscription_period:
+        body["subscription_period"] = int(subscription_period)
+    return body
+
+
 async def send_invoice_stars(
     settings: Settings,
     chat_id: int,
@@ -82,18 +104,44 @@ async def send_invoice_stars(
     label: str | None = None,
     subscription_period: int | None = None,
 ) -> dict[str, Any]:
-    body: dict[str, Any] = {
-        "chat_id": chat_id,
-        "title": title[:32],
-        "description": description[:255],
-        "payload": payload[:128],
-        "currency": "XTR",
-        "provider_token": "",
-        "prices": [{"label": label or title[:32], "amount": stars_amount}],
-    }
-    if subscription_period:
-        body["subscription_period"] = int(subscription_period)
+    body = _stars_invoice_body(
+        title=title,
+        description=description,
+        payload=payload,
+        stars_amount=stars_amount,
+        label=label,
+        subscription_period=subscription_period,
+    )
+    body["chat_id"] = chat_id
     return await telegram_call(settings, "sendInvoice", json=body)
+
+
+async def create_invoice_link_stars(
+    settings: Settings,
+    *,
+    title: str,
+    description: str,
+    payload: str,
+    stars_amount: int,
+    label: str | None = None,
+    subscription_period: int | None = None,
+) -> str:
+    """Invoice URL for Telegram.WebApp.openInvoice (Mini App)."""
+    body = _stars_invoice_body(
+        title=title,
+        description=description,
+        payload=payload,
+        stars_amount=stars_amount,
+        label=label,
+        subscription_period=subscription_period,
+    )
+    resp = await telegram_call(settings, "createInvoiceLink", json=body)
+    if resp.get("skipped"):
+        return ""
+    link = resp.get("result")
+    if not isinstance(link, str) or not link.strip():
+        raise TelegramApiError("Telegram createInvoiceLink returned empty link", response=resp)
+    return link.strip()
 
 
 async def edit_user_star_subscription(

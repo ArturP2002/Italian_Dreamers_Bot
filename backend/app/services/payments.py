@@ -35,7 +35,12 @@ from app.services.entitlements import (
     apply_top_until,
     utcnow,
 )
-from app.services.telegram_api import edit_user_star_subscription, send_invoice_stars, send_message
+from app.services.telegram_api import (
+    create_invoice_link_stars,
+    edit_user_star_subscription,
+    send_invoice_stars,
+    send_message,
+)
 
 
 PAYLOAD_PREFIX = "pub"
@@ -197,6 +202,25 @@ async def create_publish_payment(
     return payment
 
 
+def _publish_invoice_copy(*, user: User, profile: Profile) -> tuple[str, str]:
+    lang = user.language_code if user.language_code in {"ru", "it"} else "ru"
+    if lang == "it":
+        return (
+            "Pubblicazione profilo",
+            (
+                f"Pubblicazione del profilo di {profile.name} nel canale Italian Dreamers. "
+                "Dopo il pagamento entrerai in coda di pubblicazione."
+            ),
+        )
+    return (
+        "Публикация анкеты",
+        (
+            f"Публикация анкеты {profile.name} в канале Italian Dreamers. "
+            "После оплаты анкета попадёт в очередь публикации."
+        ),
+    )
+
+
 async def send_publish_invoice(
     settings: Settings,
     *,
@@ -204,22 +228,29 @@ async def send_publish_invoice(
     profile: Profile,
     payment: Payment,
 ) -> None:
-    lang = user.language_code if user.language_code in {"ru", "it"} else "ru"
-    if lang == "it":
-        title = "Pubblicazione profilo"
-        description = (
-            f"Pubblicazione del profilo di {profile.name} nel canale Italian Dreamers. "
-            "Dopo il pagamento entrerai in coda di pubblicazione."
-        )
-    else:
-        title = "Публикация анкеты"
-        description = (
-            f"Публикация анкеты {profile.name} в канале Italian Dreamers. "
-            "После оплаты анкета попадёт в очередь публикации."
-        )
+    """Chat invoice (moderation / bot push). Mini App uses create_publish_invoice_link."""
+    title, description = _publish_invoice_copy(user=user, profile=profile)
     await send_invoice_stars(
         settings,
         user.telegram_id,
+        title=title,
+        description=description,
+        payload=payment.telegram_payload or make_publish_payload(payment.id, profile.id),
+        stars_amount=payment.stars_amount,
+        label=title,
+    )
+
+
+async def create_publish_invoice_link(
+    settings: Settings,
+    *,
+    user: User,
+    profile: Profile,
+    payment: Payment,
+) -> str:
+    title, description = _publish_invoice_copy(user=user, profile=profile)
+    return await create_invoice_link_stars(
+        settings,
         title=title,
         description=description,
         payload=payment.telegram_payload or make_publish_payload(payment.id, profile.id),
@@ -620,7 +651,7 @@ async def create_unlimited_payment(
     return payment
 
 
-async def send_unlimited_invoice(settings: Settings, *, user: User, payment: Payment) -> None:
+async def send_unlimited_invoice(settings: Settings, *, user: User, payment: Payment) -> str:
     lang = user.language_code if user.language_code in {"ru", "it"} else "ru"
     if lang == "it":
         title = "Dreamers Plus"
@@ -634,9 +665,8 @@ async def send_unlimited_invoice(settings: Settings, *, user: User, payment: Pay
             "30 дней: письма без лимита, анкета в «Участниках», топ каталога. "
             "Автопродление Telegram Stars."
         )
-    await send_invoice_stars(
+    return await create_invoice_link_stars(
         settings,
-        user.telegram_id,
         title=title,
         description=description,
         payload=payment.telegram_payload or make_sub_payload(payment.id),
@@ -844,7 +874,7 @@ async def send_catalog_top_invoice(
     user: User,
     profile: Profile,
     payment: Payment,
-) -> None:
+) -> str:
     lang = user.language_code if user.language_code in {"ru", "it"} else "ru"
     if lang == "it":
         title = "Porta il profilo in alto"
@@ -852,9 +882,8 @@ async def send_catalog_top_invoice(
     else:
         title = "Подними анкету в топ"
         description = f"7 дней в топе каталога Mini App для {profile.name}."
-    await send_invoice_stars(
+    return await create_invoice_link_stars(
         settings,
-        user.telegram_id,
         title=title,
         description=description,
         payload=payment.telegram_payload or make_top_payload(payment.id, profile.id),

@@ -10,6 +10,7 @@ import {
   type MeUser,
   type PublicConfig,
 } from "../lib/api";
+import { openStarsInvoice } from "../lib/telegramPay";
 
 type Props = { language: Language; onCreditsChange?: () => void };
 
@@ -70,14 +71,31 @@ export function CreditsScreen({ language, onCreditsChange }: Props) {
         return;
       }
       const res = await buyUnlimited();
-      setInfo(
-        res.already
-          ? tf(language, "unlimitedActive", { date: plusUntil })
-          : t(language, "invoiceSent"),
-      );
-      onCreditsChange?.();
-      await reload();
-      setSheetOpen(false);
+      if (res.already) {
+        setInfo(tf(language, "unlimitedActive", { date: plusUntil }));
+        setSheetOpen(false);
+        onCreditsChange?.();
+        await reload();
+        return;
+      }
+      if (!res.invoice_url) {
+        setError(t(language, "errorGeneric"));
+        return;
+      }
+      const status = await openStarsInvoice(res.invoice_url);
+      if (status === "paid") {
+        setInfo(t(language, "paymentPaid"));
+        setSheetOpen(false);
+        onCreditsChange?.();
+        await reload();
+      } else if (status === "cancelled") {
+        setInfo(t(language, "paymentCancelled"));
+      } else if (status === "pending") {
+        setInfo(t(language, "invoiceSent"));
+        setSheetOpen(false);
+      } else {
+        setError(t(language, "errorGeneric"));
+      }
     } catch {
       setError(t(language, "errorGeneric"));
     } finally {
@@ -260,6 +278,9 @@ export function CreditsScreen({ language, onCreditsChange }: Props) {
               </span>
               <span className="balance-sheet__radio" aria-hidden />
             </button>
+
+            {info ? <p className="home-meta">{info}</p> : null}
+            {error ? <p className="form-error">{error}</p> : null}
 
             <button
               type="button"

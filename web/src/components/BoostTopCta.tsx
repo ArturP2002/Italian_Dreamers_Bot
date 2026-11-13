@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { type Language, t, tf } from "../i18n/messages";
 import { buyCatalogTop, fetchConfig, type PublicConfig } from "../lib/api";
+import { openStarsInvoice } from "../lib/telegramPay";
 
 type Props = {
   language: Language;
@@ -77,10 +78,25 @@ export function BoostTopCta({
       const res = await buyCatalogTop();
       if (res.included || res.already) {
         setInfo(t(language, "boostIncluded"));
-      } else {
-        setInfo(t(language, "invoiceSent"));
+        setOpen(false);
+        return;
       }
-      setOpen(false);
+      if (!res.invoice_url) {
+        setError(t(language, "errorGeneric"));
+        return;
+      }
+      const status = await openStarsInvoice(res.invoice_url);
+      if (status === "paid") {
+        setInfo(t(language, "paymentPaid"));
+        setOpen(false);
+      } else if (status === "cancelled") {
+        setInfo(t(language, "paymentCancelled"));
+      } else if (status === "pending") {
+        setInfo(t(language, "invoiceSent"));
+        setOpen(false);
+      } else {
+        setError(t(language, "errorGeneric"));
+      }
     } catch {
       setError(t(language, "errorGeneric"));
     } finally {
@@ -163,6 +179,9 @@ export function BoostTopCta({
               </span>
               <span className="balance-sheet__radio" aria-hidden />
             </button>
+
+            {info ? <p className="home-meta">{info}</p> : null}
+            {error ? <p className="form-error">{error}</p> : null}
 
             <button
               type="button"

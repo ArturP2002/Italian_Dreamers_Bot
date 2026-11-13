@@ -627,7 +627,12 @@ export async function fetchCoverQuestions(): Promise<CoverQuestion[]> {
   return data?.questions ?? [];
 }
 
-export async function requestPublishInvoice(): Promise<{ ok: boolean; stars?: number } | null> {
+export async function requestPublishInvoice(): Promise<{
+  ok: boolean;
+  stars?: number;
+  queued?: boolean;
+  invoice_url?: string;
+} | null> {
   return apiFetch("/api/me/profile/pay", { method: "POST" });
 }
 
@@ -1086,7 +1091,12 @@ export async function fetchNewcomers(): Promise<{ items: CatalogCard[] }> {
   return (await apiFetch<{ items: CatalogCard[] }>("/api/catalog/newcomers")) ?? { items: [] };
 }
 
-export async function buyUnlimited(): Promise<{ ok: boolean; already?: boolean; stars?: number }> {
+export async function buyUnlimited(): Promise<{
+  ok: boolean;
+  already?: boolean;
+  stars?: number;
+  invoice_url?: string;
+}> {
   return apiFetchJsonOrThrow("/api/me/unlimited", { method: "POST" });
 }
 
@@ -1094,7 +1104,13 @@ export async function cancelUnlimited(): Promise<{ ok: boolean; expires_at?: str
   return apiFetchJsonOrThrow("/api/me/unlimited/cancel", { method: "POST" });
 }
 
-export async function buyCatalogTop(): Promise<{ ok: boolean; already?: boolean; included?: boolean; stars?: number }> {
+export async function buyCatalogTop(): Promise<{
+  ok: boolean;
+  already?: boolean;
+  included?: boolean;
+  stars?: number;
+  invoice_url?: string;
+}> {
   return apiFetchJsonOrThrow("/api/me/catalog-top", { method: "POST" });
 }
 

@@ -49,6 +49,7 @@ type TelegramWebApp = {
   setBottomBarColor?: (color: string) => void;
   openTelegramLink?: (url: string) => void;
   openLink?: (url: string) => void;
+  openInvoice?: (url: string, callback?: (status: string) => void) => void;
   showAlert?: (message: string, callback?: () => void) => void;
   showConfirm?: (message: string, callback?: (ok: boolean) => void) => void;
   showPopup?: (params: {

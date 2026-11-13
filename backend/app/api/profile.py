@@ -34,7 +34,7 @@ from app.services.greeting_video import (
 )
 from app.services.notify import notify_admins_profile_submitted
 from app.services.username_nudge import maybe_nudge_after_submit
-from app.services.payments import create_publish_payment, send_publish_invoice
+from app.services.payments import create_publish_invoice_link, create_publish_payment
 from app.services.profiles import (
     CONTACT_CHECKED_FIELDS,
     assert_editable,
@@ -507,10 +507,19 @@ async def request_publish_invoice(
         return {"ok": True, "queued": True}
 
     payment = await create_publish_payment(session, settings, user=auth.user, profile=profile)
-    await send_publish_invoice(settings, user=auth.user, profile=profile, payment=payment)
+    try:
+        invoice_url = await create_publish_invoice_link(
+            settings, user=auth.user, profile=profile, payment=payment
+        )
+    except Exception as exc:
+        from app.services.telegram_api import TelegramApiError
+
+        if isinstance(exc, TelegramApiError):
+            raise HTTPException(status_code=502, detail="invoice_failed") from exc
+        raise
     return {
         "ok": True,
         "payment_id": payment.id,
         "stars": payment.stars_amount,
-        "message": "Invoice sent to Telegram chat",
+        "invoice_url": invoice_url,
     }

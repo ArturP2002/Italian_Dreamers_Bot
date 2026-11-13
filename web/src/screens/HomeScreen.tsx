@@ -15,6 +15,7 @@ import {
   type MeUser,
   type PublicConfig,
 } from "../lib/api";
+import { openStarsInvoice } from "../lib/telegramPay";
 
 function formatMembers(n: number, language: Language): string {
   try {
@@ -138,12 +139,34 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
   const onPay = async () => {
     setPayBusy(true);
     setPayMsg(null);
-    const res = await requestPublishInvoice();
-    setPayBusy(false);
-    if (res?.ok) {
-      setPayMsg(t(language, "homePaySent"));
-    } else {
+    try {
+      const res = await requestPublishInvoice();
+      if (!res?.ok) {
+        setPayMsg(t(language, "errorGeneric"));
+        return;
+      }
+      if (res.queued) {
+        setPayMsg(t(language, "homePaySent"));
+        return;
+      }
+      if (!res.invoice_url) {
+        setPayMsg(t(language, "errorGeneric"));
+        return;
+      }
+      const status = await openStarsInvoice(res.invoice_url);
+      if (status === "paid") {
+        setPayMsg(t(language, "paymentPaid"));
+      } else if (status === "cancelled") {
+        setPayMsg(t(language, "paymentCancelled"));
+      } else if (status === "pending") {
+        setPayMsg(t(language, "homePaySent"));
+      } else {
+        setPayMsg(t(language, "errorGeneric"));
+      }
+    } catch {
       setPayMsg(t(language, "errorGeneric"));
+    } finally {
+      setPayBusy(false);
     }
   };
 

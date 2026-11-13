@@ -249,10 +249,15 @@ async def buy_unlimited(
         return {"ok": True, "already": True}
     payment = await create_unlimited_payment(session, settings, user=auth.user)
     try:
-        await send_unlimited_invoice(settings, user=auth.user, payment=payment)
+        invoice_url = await send_unlimited_invoice(settings, user=auth.user, payment=payment)
     except TelegramApiError as exc:
         raise _invoice_or_502(exc) from exc
-    return {"ok": True, "payment_id": payment.id, "stars": payment.stars_amount}
+    return {
+        "ok": True,
+        "payment_id": payment.id,
+        "stars": payment.stars_amount,
+        "invoice_url": invoice_url,
+    }
 
 
 @router.post("/unlimited/cancel")
@@ -289,10 +294,17 @@ async def buy_catalog_top(
         return {"ok": True, "already": True, "included": True}
     payment = await create_catalog_top_payment(session, settings, user=auth.user, profile=profile)
     try:
-        await send_catalog_top_invoice(settings, user=auth.user, profile=profile, payment=payment)
+        invoice_url = await send_catalog_top_invoice(
+            settings, user=auth.user, profile=profile, payment=payment
+        )
     except TelegramApiError as exc:
         raise _invoice_or_502(exc) from exc
-    return {"ok": True, "payment_id": payment.id, "stars": payment.stars_amount}
+    return {
+        "ok": True,
+        "payment_id": payment.id,
+        "stars": payment.stars_amount,
+        "invoice_url": invoice_url,
+    }
 
 
 @router.post("/verification")
