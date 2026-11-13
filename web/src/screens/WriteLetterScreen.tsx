@@ -26,11 +26,12 @@ function GiftIcon() {
   );
 }
 
+/** Standard camera glyph for empty photo circle (TZ mock). */
 function CameraIcon() {
   return (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M4 8.5h3l1.5-2h7L17 8.5h3a1 1 0 0 1 1 1V18a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5a1 1 0 0 1 1-1Z" />
-      <circle cx="12" cy="13.5" r="3.5" />
+    <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M3.5 9.2h3.1l1.4-2.2h7.9l1.4 2.2h3.2c.8 0 1.5.7 1.5 1.5v8.3c0 .8-.7 1.5-1.5 1.5H3.5c-.8 0-1.5-.7-1.5-1.5v-8.3c0-.8.7-1.5 1.5-1.5Z" />
+      <circle cx="12" cy="14" r="3.6" />
     </svg>
   );
 }
@@ -264,13 +265,15 @@ export function WriteLetterScreen({ language, me, onCreditsChange }: Props) {
           aria-label={t(language, "writePickPhoto")}
           onClick={() => fileRef.current?.click()}
         >
-          {circlePhoto ? (
-            <img src={circlePhoto} alt="" />
-          ) : (
-            <span className="photo-picker__icon">
-              <CameraIcon />
-            </span>
-          )}
+          <span className="photo-picker__face">
+            {circlePhoto ? (
+              <img src={circlePhoto} alt="" draggable={false} />
+            ) : (
+              <span className="photo-picker__icon">
+                <CameraIcon />
+              </span>
+            )}
+          </span>
           <span className="photo-picker__plus" aria-hidden>
             +
           </span>
