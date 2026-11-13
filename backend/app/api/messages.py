@@ -33,7 +33,13 @@ from app.services.messages import (
 from app.services.entitlements import has_unlimited
 from app.services.payments import create_credit_payment, send_credit_invoice
 from app.services.profiles import get_user_profile
-from app.services.referrals import claim_referral, count_invited, ensure_referral_code, referral_link
+from app.services.referrals import (
+    claim_referral,
+    count_invited,
+    ensure_referral_code,
+    referral_link,
+    referral_top_days_for_invites,
+)
 from app.services.vision import assess_profile_photo
 
 router = APIRouter(tags=["messages"])
@@ -153,6 +159,8 @@ class ReferralOut(BaseModel):
     referred_by_user_id: int | None
     invited_count: int = 0
     bonus_credits: int = 0
+    bonus_top_days: int = 3
+    top_days_earned: int = 0
 
 
 def _photo_url(file_id: str | None) -> str | None:
@@ -733,12 +741,16 @@ async def _referral_out(session: AsyncSession, settings: Settings, user: User) -
     session.add(user)
     await session.commit()
     await session.refresh(user)
+    invited = await count_invited(session, user)
+    top_days = max(0, settings.referral_bonus_top_days)
     return ReferralOut(
         code=code,
         link=await referral_link(settings, code),
         referred_by_user_id=user.referred_by_user_id,
-        invited_count=await count_invited(session, user),
+        invited_count=invited,
         bonus_credits=max(0, settings.referral_bonus_credits),
+        bonus_top_days=top_days,
+        top_days_earned=referral_top_days_for_invites(settings, invited),
     )
 
 

@@ -429,6 +429,8 @@ export type ReferralInfo = {
   referred_by_user_id: number | null;
   invited_count: number;
   bonus_credits: number;
+  bonus_top_days?: number;
+  top_days_earned?: number;
 };
 
 export type ProfileUpdatePayload = Partial<{
@@ -554,6 +556,11 @@ export async function updateProfile(payload: ProfileUpdatePayload): Promise<Prof
 /** Throws on error; the message carries the API detail (e.g. `contact_forbidden`). */
 export async function submitProfile(): Promise<Profile> {
   return apiFetchJsonOrThrow<Profile>("/api/me/profile/submit", { method: "POST" });
+}
+
+/** Deletes the current user's profile (channel post + catalog if published). */
+export async function deleteMyProfile(): Promise<void> {
+  await apiFetchJsonOrThrow<{ ok: boolean }>("/api/me/profile", { method: "DELETE" });
 }
 
 export async function uploadProfilePhoto(file: File): Promise<Profile> {

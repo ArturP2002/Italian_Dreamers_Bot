@@ -35,6 +35,8 @@ export function ReferralScreen({ language }: Props) {
   };
 
   const invited = info?.invited_count ?? 0;
+  const perFriend = info?.bonus_top_days ?? 3;
+  const topDays = info?.top_days_earned ?? invited * perFriend;
 
   return (
     <section className="screen screen--milky">
@@ -58,7 +60,7 @@ export function ReferralScreen({ language }: Props) {
             </div>
             <div className="referral-stat">
               <span>{t(language, "referralTopDays")}</span>
-              <strong>{invited}</strong>
+              <strong>{topDays}</strong>
             </div>
           </div>
 

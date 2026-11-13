@@ -736,12 +736,15 @@ async def notify_referrer_joined(
     invited: User,
     total: int,
     bonus: int = 0,
+    top_days: int = 0,
 ) -> None:
     lang = referrer.language_code if referrer.language_code in {"ru", "it"} else "ru"
     name = html.escape(invited.telegram_first_name or "")
     if lang == "it":
         who = f"<b>{name}</b>" if name else "una nuova persona"
         text = f"🎉 {who} si è unito a Italian Dreamers con il tuo link.\n"
+        if top_days:
+            text += f"Bonus top catalogo: <b>+{top_days} giorni</b>.\n"
         if bonus:
             text += (
                 f"Crediti per le lettere accreditati: <b>+{bonus}</b> "
@@ -752,6 +755,8 @@ async def notify_referrer_joined(
     else:
         who = f"<b>{name}</b>" if name else "новый участник"
         text = f"🎉 По вашей ссылке к Italian Dreamers присоединился(-ась) {who}.\n"
+        if top_days:
+            text += f"Бонус топа в каталоге: <b>+{top_days} дн.</b>\n"
         if bonus:
             text += (
                 f"Начислено кредитов на письма: <b>+{bonus}</b> "

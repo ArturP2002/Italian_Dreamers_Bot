@@ -43,7 +43,8 @@ class Settings(BaseSettings):
         default=500,
     )
     message_pack_size: int = Field(alias="MESSAGE_PACK_SIZE", default=10)
-    referral_bonus_credits: int = Field(alias="REFERRAL_BONUS_CREDITS", default=1)
+    referral_bonus_credits: int = Field(alias="REFERRAL_BONUS_CREDITS", default=0)
+    referral_bonus_top_days: int = Field(alias="REFERRAL_BONUS_TOP_DAYS", default=3)
     price_profile_publish_stars: int = Field(alias="PRICE_PROFILE_PUBLISH_STARS", default=1000)
     price_ad_slot_stars: int = Field(alias="PRICE_AD_SLOT_STARS", default=1000)
     price_unlimited_sub_stars: int = Field(alias="PRICE_UNLIMITED_SUB_STARS", default=1000)

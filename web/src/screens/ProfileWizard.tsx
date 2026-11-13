@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { guideAssets, guidePhotos, introVideo, wizardStepPhotos } from "../assets/backgrounds";
 import { BoostTopCta } from "../components/BoostTopCta";
 import { PhotoGuideSheet } from "../components/PhotoGuideSheet";
@@ -8,6 +8,7 @@ import { COVER_QUESTIONS, type Language, type MessageKey, tf, t } from "../i18n/
 import {
   checkUsername,
   deleteGreetingVideo,
+  deleteMyProfile,
   deleteProfilePhoto,
   fetchConfig,
   fetchProfile,
@@ -107,10 +108,12 @@ function WizardChrome({
 }
 
 export function ProfileWizard({ language, me, onMeRefresh }: Props) {
+  const navigate = useNavigate();
   const [phase, setPhase] = useState<Phase>("loading");
   const [step, setStep] = useState(1);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [photoGuideOpen, setPhotoGuideOpen] = useState(false);
   const [gender, setGender] = useState<"male" | "female" | null>(
@@ -558,6 +561,43 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
       if (tg?.openTelegramLink) tg.openTelegramLink(postUrl);
       else window.open(postUrl, "_blank", "noopener");
     };
+    const confirmDelete = () =>
+      new Promise<boolean>((resolve) => {
+        const tg = window.Telegram?.WebApp;
+        try {
+          if (tg?.showPopup) {
+            tg.showPopup(
+              {
+                title: t(language, "myProfileDelete"),
+                message: t(language, "myProfileDeleteConfirm"),
+                buttons: [
+                  { id: "delete", type: "destructive", text: t(language, "myProfileDeleteYes") },
+                  { id: "cancel", type: "cancel", text: t(language, "myProfileDeleteCancel") },
+                ],
+              },
+              (btn) => resolve(btn === "delete"),
+            );
+            return;
+          }
+        } catch {
+          /* popup unsupported */
+        }
+        resolve(window.confirm(t(language, "myProfileDeleteConfirm")));
+      });
+    const onDelete = async () => {
+      if (deleting) return;
+      if (!(await confirmDelete())) return;
+      setDeleting(true);
+      setError(null);
+      try {
+        await deleteMyProfile();
+        await onMeRefresh();
+        navigate("/", { replace: true });
+      } catch {
+        setError(t(language, "myProfileDeleteError"));
+        setDeleting(false);
+      }
+    };
     const photos = profile?.photos ?? [];
     const cover = profile?.cover_question_id ? COVER_QUESTIONS[profile.cover_question_id] : null;
     const wantsKey: MessageKey =
@@ -656,9 +696,19 @@ export function ProfileWizard({ language, me, onMeRefresh }: Props) {
           </article>
         ) : null}
 
+        {error ? <p className="form-error">{error}</p> : null}
+
         <Link to="/" className="btn btn--block my-profile-home">
           {t(language, "toHome")}
         </Link>
+        <button
+          type="button"
+          className="btn btn--block btn--ghost my-profile-delete"
+          disabled={deleting}
+          onClick={() => void onDelete()}
+        >
+          {deleting ? t(language, "myProfileDeleteBusy") : t(language, "myProfileDelete")}
+        </button>
       </section>
     );
   }

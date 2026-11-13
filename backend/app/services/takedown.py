@@ -75,6 +75,62 @@ async def _profile_files(session: AsyncSession, profile: Profile) -> list[Path]:
     return files
 
 
+async def delete_own_profile(
+    session: AsyncSession,
+    settings: Settings,
+    *,
+    profile: Profile,
+) -> None:
+    """User deletes their own questionnaire from the mini-app (any status)."""
+    if profile.status == ProfileStatus.PUBLISHED.value:
+        await take_down_and_delete_profile(
+            session, settings, profile=profile, admin=None, notify_user=False
+        )
+        return
+
+    now = datetime.now(timezone.utc)
+    profile_name = profile.name
+    from app.services.messages import refund_held_credit
+
+    held_rows = await session.execute(
+        select(MessageRequest)
+        .where(
+            MessageRequest.profile_id == profile.id,
+            MessageRequest.status.in_(UNANSWERED_STATUSES),
+            MessageRequest.credit_held > 0,
+        )
+        .options(selectinload(MessageRequest.sender))
+    )
+    for letter in held_rows.scalars().all():
+        await refund_held_credit(session, mr=letter, note="profile_self_delete_refund")
+
+    await session.execute(
+        update(MessageRequest)
+        .where(
+            MessageRequest.profile_id == profile.id,
+            MessageRequest.status.in_(UNANSWERED_STATUSES),
+        )
+        .values(status=MessageRequestStatus.CLOSED.value)
+    )
+    await session.execute(
+        update(MessageRequest)
+        .where(MessageRequest.profile_id == profile.id)
+        .values(
+            profile_name_snapshot=profile_name,
+            profile_owner_user_id=profile.user_id,
+            profile_deleted_at=now,
+        )
+    )
+    files = await _profile_files(session, profile)
+    await session.delete(profile)
+    await session.commit()
+    for path in files:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            logger.exception("Failed to delete file %s of self-deleted profile", path)
+
+
 async def take_down_and_delete_profile(
     session: AsyncSession,
     settings: Settings,

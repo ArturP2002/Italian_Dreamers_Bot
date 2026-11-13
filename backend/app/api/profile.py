@@ -43,6 +43,7 @@ from app.services.profiles import (
     get_user_profile,
     validate_for_submit,
 )
+from app.services.takedown import delete_own_profile
 
 router = APIRouter(prefix="/me/profile", tags=["profile"])
 
@@ -199,6 +200,30 @@ async def get_profile(
 ) -> ProfileOut:
     profile = await get_or_create_draft(session, auth.user)
     return _serialize(profile)
+
+
+@router.delete("")
+async def delete_my_profile(
+    auth: AuthContext = Depends(get_auth_context),
+    session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    """User removes their own questionnaire from the mini-app."""
+    from sqlalchemy.orm import selectinload
+
+    from sqlalchemy import select
+
+    result = await session.execute(
+        select(Profile)
+        .where(Profile.user_id == auth.user.id)
+        .options(selectinload(Profile.photos), selectinload(Profile.user))
+    )
+    profile = result.scalar_one_or_none()
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    # Empty draft with no progress — just drop it.
+    await delete_own_profile(session, settings, profile=profile)
+    return {"ok": True}
 
 
 @router.put("", response_model=ProfileOut)

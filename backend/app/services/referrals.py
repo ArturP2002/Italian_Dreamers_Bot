@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import logging
 import secrets
+from datetime import timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.models import CreditLedgerEntry, LedgerEntryType, User
+from app.services.entitlements import apply_top_until, utcnow
 from app.services.notify import notify_referrer_joined
+from app.services.profiles import get_user_profile
 from app.services.telegram_api import get_bot_info
 
 logger = logging.getLogger(__name__)
@@ -39,6 +42,11 @@ async def count_invited(session: AsyncSession, user: User) -> int:
         select(func.count()).select_from(User).where(User.referred_by_user_id == user.id)
     )
     return int(result.scalar_one())
+
+
+def referral_top_days_for_invites(settings: Settings, invited_count: int) -> int:
+    days = max(0, settings.referral_bonus_top_days)
+    return max(0, invited_count) * days
 
 
 async def claim_referral(
@@ -71,6 +79,14 @@ async def claim_referral(
                 note=f"referral:{user.id}",
             )
         )
+    top_days = max(0, settings.referral_bonus_top_days)
+    if top_days:
+        profile = await get_user_profile(session, referrer.id)
+        if profile is not None:
+            now = utcnow()
+            base = profile.top_until if profile.top_until and profile.top_until > now else now
+            apply_top_until(profile, base + timedelta(days=top_days))
+            session.add(profile)
     await session.commit()
     await session.refresh(user)
     await session.refresh(referrer)
@@ -81,6 +97,7 @@ async def claim_referral(
             invited=user,
             total=await count_invited(session, referrer),
             bonus=bonus,
+            top_days=top_days,
         )
     except Exception:
         logger.exception("Failed to notify referrer %s", referrer.telegram_id)
