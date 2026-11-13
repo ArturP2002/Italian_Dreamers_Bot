@@ -543,8 +543,20 @@ export async function checkUsername(): Promise<{
   return apiFetch("/api/me/username-check", { method: "POST" });
 }
 
+let _configCache: PublicConfig | null = null;
+let _configInflight: Promise<PublicConfig | null> | null = null;
+
+/** Cached public config — avoids price/member count flashing placeholder → real values. */
 export async function fetchConfig(): Promise<PublicConfig | null> {
-  return apiFetch<PublicConfig>("/api/config");
+  if (_configCache) return _configCache;
+  if (!_configInflight) {
+    _configInflight = apiFetch<PublicConfig>("/api/config").then((cfg) => {
+      if (cfg) _configCache = cfg;
+      _configInflight = null;
+      return cfg;
+    });
+  }
+  return _configInflight;
 }
 
 export async function fetchProfile(): Promise<Profile | null> {

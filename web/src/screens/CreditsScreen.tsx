@@ -48,8 +48,8 @@ export function CreditsScreen({ language, onCreditsChange }: Props) {
     void fetchConfig().then(setConfig);
   }, []);
 
-  const plusStars = config?.prices.unlimited_sub_stars ?? 1000;
-  const plusRub = config?.prices.unlimited_sub_rub ?? 2000;
+  const plusStars = config?.prices.unlimited_sub_stars;
+  const plusRub = config?.prices.unlimited_sub_rub;
   const hasPlus = Boolean(me?.has_unlimited);
   const canceled = Boolean(me?.subscription_canceled);
   const plusUntil = formatDate(me?.unlimited_until, language);
@@ -188,37 +188,37 @@ export function CreditsScreen({ language, onCreditsChange }: Props) {
               <button
                 type="button"
                 className="balance-price"
-                disabled={busy}
+                disabled={busy || plusStars == null}
                 onClick={() => {
                   setMethod("stars");
                   setSheetOpen(true);
                 }}
               >
-                {plusStars} ★
+                {plusStars != null ? `${plusStars} ★` : "…"}
               </button>
             ) : (
               <>
                 <button
                   type="button"
                   className="balance-price"
-                  disabled={busy}
+                  disabled={busy || plusRub == null}
                   onClick={() => {
                     setMethod("rub");
                     setSheetOpen(true);
                   }}
                 >
-                  <span aria-hidden>🇷🇺</span> {plusRub} ₽
+                  <span aria-hidden>🇷🇺</span> {plusRub != null ? `${plusRub} ₽` : "…"}
                 </button>
                 <button
                   type="button"
                   className="balance-price"
-                  disabled={busy}
+                  disabled={busy || plusStars == null}
                   onClick={() => {
                     setMethod("stars");
                     setSheetOpen(true);
                   }}
                 >
-                  <span aria-hidden>★</span> {plusStars} ★
+                  <span aria-hidden>★</span> {plusStars != null ? `${plusStars} ★` : "…"}
                 </button>
               </>
             )}
@@ -259,7 +259,7 @@ export function CreditsScreen({ language, onCreditsChange }: Props) {
                 <span>
                   <strong>
                     <span aria-hidden>🇷🇺 </span>
-                    {plusRub} ₽
+                    {plusRub != null ? `${plusRub} ₽` : "…"}
                   </strong>
                   <span className="balance-sheet__hint">{t(language, "balanceMethodRubHint")}</span>
                 </span>
@@ -273,7 +273,7 @@ export function CreditsScreen({ language, onCreditsChange }: Props) {
               onClick={() => setMethod("stars")}
             >
               <span>
-                <strong>{plusStars} ★</strong>
+                <strong>{plusStars != null ? `${plusStars} ★` : "…"}</strong>
                 <span className="balance-sheet__hint">{t(language, "balanceMethodStarsHint")}</span>
               </span>
               <span className="balance-sheet__radio" aria-hidden />
@@ -285,12 +285,12 @@ export function CreditsScreen({ language, onCreditsChange }: Props) {
             <button
               type="button"
               className="btn btn--block btn--dark"
-              disabled={busy}
+              disabled={busy || (method === "stars" ? plusStars == null : plusRub == null)}
               onClick={() => void onBuy()}
             >
               {method === "stars"
-                ? tf(language, "balancePayStars", { n: plusStars })
-                : tf(language, "balancePayRub", { n: plusRub })}
+                ? tf(language, "balancePayStars", { n: plusStars ?? "…" })
+                : tf(language, "balancePayRub", { n: plusRub ?? "…" })}
             </button>
           </div>
         </div>

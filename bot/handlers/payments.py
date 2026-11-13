@@ -40,6 +40,14 @@ async def on_pre_checkout(query: PreCheckoutQuery) -> None:
     async with async_session_factory() as session:
         payment = await get_payment_by_payload(session, payload)
         if payment is None:
+            settings = get_settings()
+            db_hint = settings.database_url.split("@")[-1] if settings.database_url else "?"
+            logger.error(
+                "pre_checkout payment missing payload=%r db=%s amount=%s",
+                payload,
+                db_hint,
+                query.total_amount,
+            )
             await query.answer(
                 ok=False,
                 error_message="Pagamento non trovato" if lang == "it" else "Payment not found",

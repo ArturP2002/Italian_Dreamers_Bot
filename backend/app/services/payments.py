@@ -321,8 +321,39 @@ async def complete_publish_payment(
 
 
 async def get_payment_by_payload(session: AsyncSession, payload: str) -> Payment | None:
-    result = await session.execute(select(Payment).where(Payment.telegram_payload == payload))
-    return result.scalar_one_or_none()
+    """Resolve invoice payload → Payment. Prefer pending rows; fall back to id in payload."""
+    from sqlalchemy import case
+
+    result = await session.execute(
+        select(Payment)
+        .where(Payment.telegram_payload == payload)
+        .order_by(
+            case((Payment.status == PaymentStatus.PENDING.value, 0), else_=1),
+            Payment.id.desc(),
+        )
+        .limit(1)
+    )
+    payment = result.scalar_one_or_none()
+    if payment is not None:
+        return payment
+
+    payment_id: int | None = None
+    for parse in (
+        parse_publish_payload,
+        parse_credit_payload,
+        parse_pack_payload,
+        parse_ad_payload,
+        parse_top_payload,
+    ):
+        parsed = parse(payload)
+        if parsed is not None:
+            payment_id = int(parsed[0])
+            break
+    if payment_id is None:
+        payment_id = parse_sub_payload(payload)
+    if payment_id is None:
+        return None
+    return await session.get(Payment, payment_id)
 
 
 async def create_credit_payment(
@@ -728,12 +759,14 @@ async def complete_unlimited_payment(
 
     if payment.status == PaymentStatus.COMPLETED.value:
         if telegram_charge_id and telegram_charge_id != payment.telegram_payment_charge_id:
+            # Keep original sub:<id> payload unique on the first payment row;
+            # renewals must not share telegram_payload (breaks get_payment_by_payload).
             renewal = Payment(
                 user_id=user.id,
                 product=PaymentProduct.UNLIMITED_SUB.value,
                 status=PaymentStatus.COMPLETED.value,
                 completed_at=utcnow(),
-                telegram_payload=payment.telegram_payload,
+                telegram_payload=None,
                 **_stars_fields(payment.stars_amount or settings.price_unlimited_sub_stars),
             )
             _mark_provider_paid(renewal, provider_payment_id=telegram_charge_id)

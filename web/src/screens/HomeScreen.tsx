@@ -87,7 +87,7 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
   const [likesReceived, setLikesReceived] = useState(0);
   const [newToday, setNewToday] = useState(0);
   const [channelUrl, setChannelUrl] = useState("https://t.me/italiandreamers");
-  const [channelMembers, setChannelMembers] = useState(20000);
+  const [channelMembers, setChannelMembers] = useState<number | null>(null);
   const [config, setConfig] = useState<PublicConfig | null>(null);
   const [travelOpen, setTravelOpen] = useState(false);
   const [travelBusy, setTravelBusy] = useState(false);
@@ -172,8 +172,8 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
 
   const showVerify =
     hasProfile && status !== "draft" && me?.verification_status !== "verified";
-  const stars = config?.prices.profile_publish_stars ?? 1000;
-  const rub = config?.prices.profile_publish_rub ?? 0;
+  const stars = config?.prices.profile_publish_stars;
+  const rub = config?.prices.profile_publish_rub;
   const channelDate = formatChannelDate(me?.profile_scheduled_at, language);
 
   let funnelTitle = t(language, "homeFillProfile");
@@ -258,12 +258,17 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
           <button
             type="button"
             className="btn btn--block btn--dark home-funnel__cta"
-            disabled={payBusy}
+            disabled={payBusy || stars == null}
             onClick={() => void onPay()}
           >
-            {rub > 0
-              ? tf(language, "homeFunnelPayCtaRub", { rub: rub.toLocaleString("ru-RU"), stars })
-              : tf(language, "homeFunnelPayCta", { stars })}
+            {stars == null
+              ? "…"
+              : rub && rub > 0
+                ? tf(language, "homeFunnelPayCtaRub", {
+                    rub: rub.toLocaleString("ru-RU"),
+                    stars,
+                  })
+                : tf(language, "homeFunnelPayCta", { stars })}
           </button>
         ) : null}
 
@@ -385,7 +390,9 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
               <path d="M9.8 15.5 9.6 19c.3 0 .5-.1.7-.3l1.7-1.6 3.5 2.6c.6.3 1.1.2 1.3-.6l2.3-10.9c.2-.9-.3-1.3-.9-1.1L4.2 11.2c-.9.3-.9.8-.2 1l3.5 1.1 8.1-5.1c.4-.2.7 0 .4.3l-6.2 7z" />
             </svg>
           </span>
-          <span className="home-channel-card__count">{formatMembers(channelMembers, language)}</span>
+          <span className="home-channel-card__count">
+            {channelMembers != null ? formatMembers(channelMembers, language) : "…"}
+          </span>
           <span className="home-channel-card__heart" aria-hidden>
             <img src={homeAssets.channelHeart} alt="" />
           </span>

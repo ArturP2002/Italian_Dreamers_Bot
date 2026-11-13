@@ -45,8 +45,8 @@ export function BoostTopCta({
     setMethod(starsOnly ? "stars" : "rub");
   }, [starsOnly]);
 
-  const stars = config?.prices.catalog_top_stars ?? 500;
-  const rub = config?.prices.catalog_top_rub ?? 1000;
+  const stars = config?.prices.catalog_top_stars;
+  const rub = config?.prices.catalog_top_rub;
   const left = daysLeft(topUntil);
 
   if (!verified) {
@@ -160,7 +160,7 @@ export function BoostTopCta({
                 <span>
                   <strong>
                     <span aria-hidden>🇷🇺 </span>
-                    {rub.toLocaleString("ru-RU")} ₽
+                    {rub != null ? `${rub.toLocaleString("ru-RU")} ₽` : "…"}
                   </strong>
                   <span className="balance-sheet__hint">{t(language, "balanceMethodRubHint")}</span>
                 </span>
@@ -174,7 +174,7 @@ export function BoostTopCta({
               onClick={() => setMethod("stars")}
             >
               <span>
-                <strong>{stars} ★</strong>
+                <strong>{stars != null ? `${stars} ★` : "…"}</strong>
                 <span className="balance-sheet__hint">{t(language, "balanceMethodStarsHint")}</span>
               </span>
               <span className="balance-sheet__radio" aria-hidden />
@@ -186,12 +186,12 @@ export function BoostTopCta({
             <button
               type="button"
               className="btn btn--block btn--dark"
-              disabled={busy}
+              disabled={busy || (method === "stars" ? stars == null : rub == null)}
               onClick={() => void onPay()}
             >
               {method === "stars"
-                ? tf(language, "balancePayStars", { n: stars })
-                : tf(language, "balancePayRub", { n: rub })}
+                ? tf(language, "balancePayStars", { n: stars ?? "…" })
+                : tf(language, "balancePayRub", { n: rub ?? "…" })}
             </button>
           </div>
         </div>
