@@ -264,7 +264,7 @@ export function VerifyScreen({ language, onRefresh }: Props) {
     <section className={`screen screen--milky verify-screen${ritualActive ? " verify-screen--ritual" : ""}`}>
       {!ritualActive ? (
         <>
-          <Link to="/" className="work-back" onClick={() => stopCamera()}>
+          <Link to="/" className="work-back work-back--sticky" onClick={() => stopCamera()}>
             ← {t(language, "backHome")}
           </Link>
           <h1 className="work-title">{t(language, "verifyTitle")}</h1>

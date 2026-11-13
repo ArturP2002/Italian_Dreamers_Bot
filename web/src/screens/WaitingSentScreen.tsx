@@ -57,7 +57,7 @@ export function WaitingSentScreen({ language, me, onMeRefresh }: Props) {
 
   return (
     <section className="screen screen--milky waiting-screen">
-      <Link to="/" className="work-back work-back--gold">
+      <Link to="/" className="work-back work-back--sticky">
         ← {t(language, "backHome")}
       </Link>
 

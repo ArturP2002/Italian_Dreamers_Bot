@@ -105,7 +105,7 @@ export function ChatScreen({ language, me }: Props) {
   return (
     <section className="screen screen--milky chat-screen">
       <header className="chat-header">
-        <Link to="/inbox" className="work-back work-back--gold">
+        <Link to="/inbox" className="work-back work-back--sticky">
           ← {t(language, "chatBack")}
         </Link>
         <div className="chat-header__who">

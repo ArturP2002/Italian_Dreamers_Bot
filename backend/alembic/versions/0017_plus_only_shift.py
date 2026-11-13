@@ -1,7 +1,7 @@
 """Plus-only shift: referral reward flag, cut notify, renewal remind, newcomers.
 
 Revision ID: 0017_plus_only_shift
-Revises: 0016_write_path_gates
+Revises: 0016
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0017_plus_only_shift"
-down_revision = "0016_write_path_gates"
+down_revision = "0016"
 branch_labels = None
 depends_on = None
 

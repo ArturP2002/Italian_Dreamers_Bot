@@ -28,8 +28,8 @@ export function CatalogProfileScreen({ language, me = null }: Props) {
 
   if (!profile) {
     return (
-      <section className="screen screen--milky screen--has-float-back">
-        <Link to="/" className="work-back work-back--float">
+      <section className="screen screen--milky">
+        <Link to="/" className="work-back work-back--sticky">
           ← {t(language, "backHome")}
         </Link>
         <p className="home-meta">{t(language, "saving")}</p>
@@ -41,8 +41,8 @@ export function CatalogProfileScreen({ language, me = null }: Props) {
   const heightUnit = language === "it" ? "cm" : "см";
 
   return (
-    <section className="screen screen--milky screen--has-float-back">
-      <Link to="/" className="work-back work-back--float">
+    <section className="screen screen--milky">
+      <Link to="/" className="work-back work-back--sticky">
         ← {t(language, "backHome")}
       </Link>
       <Link to="/catalog" className="work-back">

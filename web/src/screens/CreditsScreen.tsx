@@ -102,7 +102,7 @@ export function CreditsScreen({ language, onCreditsChange }: Props) {
 
   return (
     <section className="screen screen--milky balance-screen">
-      <Link to="/" className="work-back">
+      <Link to="/" className="work-back work-back--sticky">
         ← {t(language, "backHome")}
       </Link>
 

@@ -214,7 +214,7 @@ export function WriteLetterScreen({ language, me, onCreditsChange }: Props) {
   if (!target) {
     return (
       <section className="screen screen--milky">
-        <Link to="/" className="work-back work-back--gold">
+        <Link to="/" className="work-back work-back--sticky">
           ← {t(language, "backHome")}
         </Link>
         <p className="home-meta">{t(language, "saving")}</p>
@@ -224,7 +224,7 @@ export function WriteLetterScreen({ language, me, onCreditsChange }: Props) {
 
   return (
     <section className="screen screen--milky write-screen">
-      <Link to="/" className="work-back work-back--gold">
+      <Link to="/" className="work-back work-back--sticky">
         ← {t(language, "backHome")}
       </Link>
 

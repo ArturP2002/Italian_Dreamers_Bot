@@ -7,7 +7,8 @@ services:
       POSTGRES_DB: dreamers
       TZ: Europe/Rome
     ports:
-      - "5432:5432"
+      # Host 5432 often taken by other local Postgres / projects — keep volume data, remap host port.
+      - "5435:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -25,7 +26,8 @@ services:
       DATABASE_URL: postgresql+asyncpg://dreamers:dreamers@postgres:5432/dreamers
       TZ: Europe/Rome
     ports:
-      - "8000:8000"
+      # Host 8000 often taken (other APIs / php) — container still listens on 8000 inside the network.
+      - "8001:8000"
     volumes:
       - ./backend:/app
       - ./backend/media:/app/media

@@ -16,9 +16,9 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       // In Docker Compose web service, set VITE_PROXY_TARGET=http://api:8000
-      "/api": process.env.VITE_PROXY_TARGET || "http://127.0.0.1:8000",
-      "/media": process.env.VITE_PROXY_TARGET || "http://127.0.0.1:8000",
-      "/health": process.env.VITE_PROXY_TARGET || "http://127.0.0.1:8000",
+      "/api": process.env.VITE_PROXY_TARGET || "http://127.0.0.1:8001",
+      "/media": process.env.VITE_PROXY_TARGET || "http://127.0.0.1:8001",
+      "/health": process.env.VITE_PROXY_TARGET || "http://127.0.0.1:8001",
     },
   },
 });

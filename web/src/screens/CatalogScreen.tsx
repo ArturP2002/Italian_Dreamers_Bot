@@ -82,9 +82,9 @@ export function CatalogScreen({ language, me = null }: Props) {
 
   return (
     <section
-      className={`screen screen--milky screen--catalog screen--has-float-back${showGate ? " screen--with-sheet" : ""}`}
+      className={`screen screen--milky screen--catalog${showGate ? " screen--with-sheet" : ""}`}
     >
-      <Link to="/" className="work-back work-back--float">
+      <Link to="/" className="work-back work-back--sticky">
         ← {t(language, "backHome")}
       </Link>
       <h1 className="work-title">{t(language, "catalogTitle")}</h1>

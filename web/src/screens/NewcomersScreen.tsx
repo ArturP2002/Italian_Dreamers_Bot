@@ -17,7 +17,7 @@ export function NewcomersScreen({ language }: Props) {
 
   return (
     <section className="screen screen--milky screen--catalog">
-      <Link to="/" className="work-back">
+      <Link to="/" className="work-back work-back--sticky">
         ← {t(language, "backHome")}
       </Link>
       <h1 className="work-title">{t(language, "newcomersTitle")}</h1>

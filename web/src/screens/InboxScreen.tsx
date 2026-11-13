@@ -248,7 +248,7 @@ export function InboxScreen({ language, me, onMeRefresh }: Props) {
 
   return (
     <section className="screen screen--milky">
-      <Link to="/" className="work-back work-back--gold">
+      <Link to="/" className="work-back work-back--sticky">
         ← {t(language, "backHome")}
       </Link>
       <h1 className="work-title">{t(language, "inboxTitle")}</h1>

@@ -39,7 +39,7 @@ export function MessageCardScreen({ language, onCreditsChange }: Props) {
   if (!item) {
     return (
       <section className="screen screen--milky">
-        <Link to="/inbox" className="work-back work-back--gold">
+        <Link to="/inbox" className="work-back work-back--sticky">
           ← {t(language, "back")}
         </Link>
         <p className="home-meta">{t(language, "saving")}</p>
@@ -146,7 +146,7 @@ export function MessageCardScreen({ language, onCreditsChange }: Props) {
 
   return (
     <section className="screen screen--milky">
-      <Link to="/inbox" className="work-back work-back--gold">
+      <Link to="/inbox" className="work-back work-back--sticky">
         ← {t(language, "back")}
       </Link>
 

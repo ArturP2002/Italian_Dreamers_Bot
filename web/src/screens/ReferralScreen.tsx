@@ -40,7 +40,7 @@ export function ReferralScreen({ language }: Props) {
 
   return (
     <section className="screen screen--milky">
-      <Link to="/" className="work-back">
+      <Link to="/" className="work-back work-back--sticky">
         ← {t(language, "backHome")}
       </Link>
       <h1 className="work-title">{t(language, "referralTitle")}</h1>

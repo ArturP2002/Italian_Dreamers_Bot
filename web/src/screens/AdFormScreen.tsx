@@ -100,7 +100,7 @@ export function AdFormScreen({ language }: Props) {
     const stars = config?.prices.ad_slot_stars ?? "—";
     return (
       <section className="screen screen--milky">
-        <Link to="/" className="work-back">
+        <Link to="/" className="work-back work-back--sticky">
           ← {t(language, "backHome")}
         </Link>
         <div className="ads-done">
@@ -135,7 +135,7 @@ export function AdFormScreen({ language }: Props) {
 
   return (
     <section className="screen screen--milky">
-      <Link to="/" className="work-back">
+      <Link to="/" className="work-back work-back--sticky">
         ← {t(language, "backHome")}
       </Link>
       <h1 className="work-title">{t(language, "adsTitle")}</h1>
