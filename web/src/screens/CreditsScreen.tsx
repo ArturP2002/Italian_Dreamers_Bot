@@ -170,7 +170,9 @@ export function CreditsScreen({ language, onCreditsChange }: Props) {
         </li>
       </ul>
 
-      <article className="balance-pack balance-pack--plus">
+      <article
+        className={`balance-pack balance-pack--plus${hasPlus && !canceled ? " balance-pack--connected" : ""}`}
+      >
         <span className="balance-pack__badge">{t(language, "balancePlusBadge")}</span>
         <p className="balance-pack__qty balance-pack__qty--plus">
           <strong>

@@ -29,6 +29,7 @@ type Props = {
   language: Language;
   me: MeUser | null;
   onLanguageChange: (language: Language) => void;
+  onMeRefresh?: () => void | Promise<void>;
 };
 
 const FUNNEL_STEPS = [
@@ -69,7 +70,7 @@ function formatChannelDate(iso: string | null | undefined, language: Language): 
   });
 }
 
-export function HomeScreen({ language, me, onLanguageChange }: Props) {
+export function HomeScreen({ language, me, onLanguageChange, onMeRefresh }: Props) {
   const name = me?.first_name ?? "";
   const status = me?.profile_status ?? null;
   const hasProfile = Boolean(status && status !== "draft");
@@ -83,6 +84,7 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
   const currentStep = funnelCurrent(status);
   const [payBusy, setPayBusy] = useState(false);
   const [payMsg, setPayMsg] = useState<string | null>(null);
+  const plusCoversPublish = Boolean(me?.has_unlimited && awaitingPay);
   const [pendingLetters, setPendingLetters] = useState(0);
   const [likesReceived, setLikesReceived] = useState(0);
   const [newToday, setNewToday] = useState(0);
@@ -141,25 +143,24 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
     setPayMsg(null);
     try {
       const res = await requestPublishInvoice();
-      if (!res?.ok) {
-        setPayMsg(t(language, "errorGeneric"));
-        return;
-      }
-      if (res.queued) {
-        setPayMsg(t(language, "homePaySent"));
+      if (res.queued || res.already) {
+        setPayMsg(t(language, "homePayQueuedPlus"));
+        await onMeRefresh?.();
         return;
       }
       if (!res.invoice_url) {
         setPayMsg(t(language, "errorGeneric"));
         return;
       }
-      const status = await openStarsInvoice(res.invoice_url);
-      if (status === "paid") {
+      const payStatus = await openStarsInvoice(res.invoice_url);
+      if (payStatus === "paid") {
         setPayMsg(t(language, "paymentPaid"));
-      } else if (status === "cancelled") {
+        await onMeRefresh?.();
+      } else if (payStatus === "cancelled") {
         setPayMsg(t(language, "paymentCancelled"));
-      } else if (status === "pending") {
+      } else if (payStatus === "pending") {
         setPayMsg(t(language, "homePaySent"));
+        await onMeRefresh?.();
       } else {
         setPayMsg(t(language, "errorGeneric"));
       }
@@ -169,6 +170,27 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
       setPayBusy(false);
     }
   };
+
+  // Plus already paid — enqueue without a separate Stars invoice (and refresh stale Home state).
+  useEffect(() => {
+    if (!plusCoversPublish || payBusy) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await requestPublishInvoice();
+        if (cancelled) return;
+        if (res.queued || res.already) {
+          setPayMsg(t(language, "homePayQueuedPlus"));
+          await onMeRefresh?.();
+        }
+      } catch {
+        /* keep pay CTA */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [plusCoversPublish]);
 
   const showVerify =
     hasProfile && status !== "draft" && me?.verification_status !== "verified";
@@ -258,17 +280,19 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
           <button
             type="button"
             className="btn btn--block btn--dark home-funnel__cta"
-            disabled={payBusy || stars == null}
+            disabled={payBusy || (!plusCoversPublish && stars == null)}
             onClick={() => void onPay()}
           >
-            {stars == null
-              ? "…"
-              : rub && rub > 0
-                ? tf(language, "homeFunnelPayCtaRub", {
-                    rub: rub.toLocaleString("ru-RU"),
-                    stars,
-                  })
-                : tf(language, "homeFunnelPayCta", { stars })}
+            {plusCoversPublish
+              ? t(language, "homePayQueuedPlusCta")
+              : stars == null
+                ? "…"
+                : rub && rub > 0
+                  ? tf(language, "homeFunnelPayCtaRub", {
+                      rub: rub.toLocaleString("ru-RU"),
+                      stars,
+                    })
+                  : tf(language, "homeFunnelPayCta", { stars })}
           </button>
         ) : null}
 
@@ -466,11 +490,25 @@ export function HomeScreen({ language, me, onLanguageChange }: Props) {
       </Link>
 
       {me?.has_unlimited && me.unlimited_until ? (
-        <p className="home-meta">
-          {tf(language, "unlimitedActive", {
-            date: new Date(me.unlimited_until).toLocaleDateString(),
-          })}
-        </p>
+        <Link to="/credits" className="home-plus-chip">
+          <span className="home-plus-chip__mark" aria-hidden>
+            ✦
+          </span>
+          <span className="home-plus-chip__copy">
+            <strong>Dreamers Plus</strong>
+            <span>
+              {tf(language, "homePlusUntilChip", {
+                date: new Date(me.unlimited_until).toLocaleDateString(
+                  language === "it" ? "it-IT" : "ru-RU",
+                  { day: "numeric", month: "long" },
+                ),
+              })}
+            </span>
+          </span>
+          <span className="home-plus-chip__chevron" aria-hidden>
+            ›
+          </span>
+        </Link>
       ) : null}
 
       {me?.is_soft_banned ? (

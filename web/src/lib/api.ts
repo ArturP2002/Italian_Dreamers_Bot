@@ -643,9 +643,10 @@ export async function requestPublishInvoice(): Promise<{
   ok: boolean;
   stars?: number;
   queued?: boolean;
+  already?: boolean;
   invoice_url?: string;
-} | null> {
-  return apiFetch("/api/me/profile/pay", { method: "POST" });
+}> {
+  return apiFetchJsonOrThrow("/api/me/profile/pay", { method: "POST" });
 }
 
 async function apiFetchJsonOrThrow<T>(path: string, init?: RequestInit): Promise<T> {

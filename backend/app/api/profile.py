@@ -496,7 +496,13 @@ async def request_publish_invoice(
     profile = await get_user_profile(session, auth.user.id)
     if profile is None:
         raise HTTPException(status_code=404, detail="Profile not found")
-    if profile.status != ProfileStatus.AWAITING_PAYMENT.value:
+
+    # Idempotent: Plus may have already queued the profile while Home still shows pay CTA.
+    if profile.status in {ProfileStatus.QUEUED.value, ProfileStatus.PUBLISHED.value}:
+        return {"ok": True, "queued": True, "already": True}
+
+    payable = {ProfileStatus.AWAITING_PAYMENT.value, ProfileStatus.APPROVED.value}
+    if profile.status not in payable:
         raise HTTPException(status_code=409, detail="Profile is not awaiting payment")
 
     from app.services.entitlements import has_unlimited

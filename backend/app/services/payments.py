@@ -640,8 +640,11 @@ async def queue_profile_after_entitlement(
     profile: Profile,
     user: User,
 ) -> Profile:
-    """Move awaiting_payment profile to queued + slot without a publish invoice."""
-    if profile.status != ProfileStatus.AWAITING_PAYMENT.value:
+    """Move approved / awaiting_payment profile to queued + slot without a publish invoice."""
+    if profile.status not in {
+        ProfileStatus.AWAITING_PAYMENT.value,
+        ProfileStatus.APPROVED.value,
+    }:
         return profile
     profile.status = ProfileStatus.QUEUED.value
     profile.paid_at = profile.paid_at or utcnow()
@@ -813,7 +816,10 @@ async def complete_unlimited_payment(
     profile_result = await session.execute(select(Profile).where(Profile.user_id == user.id))
     profile = profile_result.scalar_one_or_none()
     if profile is not None:
-        if profile.status == ProfileStatus.AWAITING_PAYMENT.value:
+        if profile.status in {
+            ProfileStatus.AWAITING_PAYMENT.value,
+            ProfileStatus.APPROVED.value,
+        }:
             await queue_profile_after_entitlement(session, settings, profile=profile, user=user)
         elif profile.status in {
             ProfileStatus.DRAFT.value,

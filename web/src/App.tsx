@@ -215,7 +215,14 @@ export default function App() {
       <Routes>
         <Route
           path="/"
-          element={<HomeScreen language={language} me={me} onLanguageChange={handleLanguageChange} />}
+          element={
+            <HomeScreen
+              language={language}
+              me={me}
+              onLanguageChange={handleLanguageChange}
+              onMeRefresh={() => void refreshMe()}
+            />
+          }
         />
         <Route path="/support" element={<SupportScreen language={language} me={me} />} />
         <Route path="/catalog" element={<CatalogScreen language={language} me={me} />} />

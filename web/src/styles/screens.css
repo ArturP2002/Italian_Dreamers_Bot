@@ -427,7 +427,7 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
-  margin-bottom: 12px;
+  margin-bottom: 18px;
 }
 
 .home-card {
@@ -448,8 +448,8 @@
 }
 
 .home-card--wide .home-card__bg {
-  /* Lower focal point: bridge/roof near top, girl’s head more visible */
-  object-position: center 58%;
+  /* Slightly higher: bridge visible, people still in frame */
+  object-position: center 46%;
 }
 
 .home-card__bg {
@@ -485,7 +485,7 @@
 }
 
 .home-card__title {
-  margin: 0 0 0.85em;
+  margin: 0 0 4px;
   font-family: var(--font-display);
   font-style: normal;
   font-weight: 900;
@@ -493,8 +493,6 @@
   line-height: 1.15;
   letter-spacing: -0.01em;
   text-transform: uppercase;
-  /* Keep short titles (Симпатии) level with 2-line ones (Мои сообщения) */
-  min-height: calc(1.15em * 2);
 }
 
 .home-card__title em {
@@ -512,8 +510,7 @@
 
 .home-card--wide .home-card__title {
   font-size: 22px;
-  min-height: 0;
-  margin-bottom: 0.85em;
+  margin-bottom: 4px;
 }
 
 .home-card__hint {
@@ -521,7 +518,6 @@
   font-size: 12px;
   line-height: 1.35;
   color: rgba(255, 255, 255, 0.88);
-  min-height: calc(1.35em * 2);
 }
 
 /* Photo 3 badge style: dark translucent pill, no champagne dot */
@@ -693,6 +689,64 @@
   font-size: 13px;
   color: rgba(26, 21, 17, 0.62);
   line-height: 1.5;
+}
+
+.home-plus-chip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  margin-bottom: 10px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  text-decoration: none;
+  color: var(--color-graphite);
+  background:
+    linear-gradient(135deg, rgba(217, 196, 160, 0.55) 0%, rgba(243, 238, 229, 0.95) 48%, rgba(232, 214, 186, 0.7) 100%);
+  border: 1px solid rgba(168, 135, 90, 0.28);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.home-plus-chip__mark {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #14110e;
+  color: #e8d6ba;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.home-plus-chip__copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.home-plus-chip__copy strong {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  line-height: 1.15;
+}
+
+.home-plus-chip__copy span {
+  font-size: 12px;
+  line-height: 1.3;
+  color: rgba(26, 21, 17, 0.72);
+}
+
+.home-plus-chip__chevron {
+  flex-shrink: 0;
+  font-size: 20px;
+  color: rgba(26, 21, 17, 0.45);
 }
 
 .home-status {
@@ -2782,6 +2836,12 @@
   box-shadow: 0 1px 0 rgba(26, 21, 17, 0.04);
 }
 
+.balance-pack--connected {
+  min-height: 0;
+  gap: 8px;
+  padding: 18px 14px 14px;
+}
+
 .balance-pack--dark {
   background: #14110e;
   color: #f5efe6;
@@ -2818,6 +2878,11 @@
   gap: 2px;
   text-align: center;
   flex: 1;
+}
+
+.balance-pack--connected .balance-pack__qty {
+  flex: 0 0 auto;
+  margin-top: 14px;
 }
 
 .balance-pack__qty strong {
@@ -2886,7 +2951,7 @@
 }
 
 .balance-pack__connected {
-  margin: auto 0 0;
+  margin: 0;
   text-align: center;
   font-size: 12px;
   font-weight: 600;
@@ -3075,7 +3140,7 @@
 /* ---------- Моя анкета ---------- */
 .my-profile-status {
   margin-bottom: 12px;
-  padding: 16px;
+  padding: 14px 16px;
   border-radius: var(--radius-lg);
   background: #fff;
   color: var(--color-graphite);
@@ -3446,6 +3511,7 @@
 
 .my-profile-boost {
   margin-top: 12px;
+  margin-bottom: 12px;
 }
 
 .boost-top-cta {
